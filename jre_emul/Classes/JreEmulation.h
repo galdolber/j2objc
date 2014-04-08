@@ -20,6 +20,8 @@
 #ifndef _JreEmulation_H_
 #define _JreEmulation_H_
 
+#define J2OBJC_DISABLE_ALL_CHECKS 1
+
 #ifndef __has_feature
 #define __has_feature(x) 0  // Compatibility with non-clang compilers.
 #endif

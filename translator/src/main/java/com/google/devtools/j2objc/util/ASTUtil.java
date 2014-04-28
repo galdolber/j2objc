@@ -14,7 +14,10 @@
 
 package com.google.devtools.j2objc.util;
 
+import com.google.common.collect.AbstractIterator;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.devtools.j2objc.types.Types;
 
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
@@ -36,6 +39,7 @@ import org.eclipse.jdt.core.dom.Expression;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IExtendedModifier;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.InfixExpression;
 import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.MethodInvocation;
@@ -55,6 +59,7 @@ import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -390,13 +395,45 @@ public final class ASTUtil {
     return methods;
   }
 
-  public static List<FieldDeclaration> getFieldDeclarations(AbstractTypeDeclaration node) {
-    List<FieldDeclaration> fields = Lists.newArrayList();
-    for (BodyDeclaration bodyDecl : getBodyDeclarations(node)) {
-      if (bodyDecl instanceof FieldDeclaration) {
-        fields.add((FieldDeclaration) bodyDecl);
+  public static Iterable<FieldDeclaration> getFieldDeclarations(AbstractTypeDeclaration node) {
+    return Iterables.filter(getBodyDeclarations(node), FieldDeclaration.class);
+  }
+
+  public static Iterable<VariableDeclarationFragment> getAllFields(
+      AbstractTypeDeclaration node) {
+    final Iterable<FieldDeclaration> fieldDecls = getFieldDeclarations(node);
+    return new Iterable<VariableDeclarationFragment>() {
+      public Iterator<VariableDeclarationFragment> iterator() {
+        final Iterator<FieldDeclaration> fieldIter = fieldDecls.iterator();
+        return new AbstractIterator<VariableDeclarationFragment>() {
+          private Iterator<VariableDeclarationFragment> fragIter;
+          @Override protected VariableDeclarationFragment computeNext() {
+            do {
+              if (fragIter != null && fragIter.hasNext()) {
+                return fragIter.next();
+              }
+              if (fieldIter.hasNext()) {
+                fragIter = ASTUtil.getFragments(fieldIter.next()).iterator();
+              }
+            } while (fieldIter.hasNext() || (fragIter != null && fragIter.hasNext()));
+            return endOfData();
+          }
+        };
+      }
+    };
+  }
+
+  public static boolean hasAnnotation(Class<?> annotation, List<IExtendedModifier> modifiers) {
+    for (IExtendedModifier mod : modifiers) {
+      if (mod.isAnnotation()) {
+        Annotation ann = (Annotation) mod;
+        ITypeBinding annotationType = Types.getAnnotationBinding(ann).getAnnotationType();
+        if (annotationType.getQualifiedName().equals(annotation.getName())) {
+          return true;
+        }
       }
     }
-    return fields;
+    return false;
   }
+
 }

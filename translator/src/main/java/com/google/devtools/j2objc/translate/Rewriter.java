@@ -30,6 +30,7 @@ import com.google.devtools.j2objc.util.ErrorReportingASTVisitor;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.NameTable;
 import com.google.j2objc.annotations.AutoreleasePool;
+import com.google.j2objc.annotations.RetainedLocalRef;
 
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTVisitor;
@@ -39,14 +40,17 @@ import org.eclipse.jdt.core.dom.Assignment;
 import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.BodyDeclaration;
 import org.eclipse.jdt.core.dom.BreakStatement;
+import org.eclipse.jdt.core.dom.CastExpression;
 import org.eclipse.jdt.core.dom.ClassInstanceCreation;
 import org.eclipse.jdt.core.dom.ContinueStatement;
 import org.eclipse.jdt.core.dom.DoStatement;
 import org.eclipse.jdt.core.dom.EnhancedForStatement;
 import org.eclipse.jdt.core.dom.EnumDeclaration;
 import org.eclipse.jdt.core.dom.Expression;
+import org.eclipse.jdt.core.dom.FieldAccess;
 import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.ForStatement;
+import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.IPackageBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -60,7 +64,9 @@ import org.eclipse.jdt.core.dom.Modifier;
 import org.eclipse.jdt.core.dom.Modifier.ModifierKeyword;
 import org.eclipse.jdt.core.dom.ParenthesizedExpression;
 import org.eclipse.jdt.core.dom.PrefixExpression;
+import org.eclipse.jdt.core.dom.QualifiedName;
 import org.eclipse.jdt.core.dom.ReturnStatement;
+import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.Statement;
 import org.eclipse.jdt.core.dom.SuperMethodInvocation;
@@ -92,6 +98,8 @@ import java.util.logging.Logger;
  * @author Tom Ball
  */
 public class Rewriter extends ErrorReportingASTVisitor {
+
+  private Map<IVariableBinding, IVariableBinding> localRefs = Maps.newHashMap();
 
   /**
    * The list of Objective-C type qualifier keywords.
@@ -723,6 +731,40 @@ public class Rewriter extends ErrorReportingASTVisitor {
         statements.add(++location, newDecl);
       }
     }
+    // Scan modifiers since variable declarations don't have variable bindings.
+    if (ASTUtil.hasAnnotation(RetainedLocalRef.class, ASTUtil.getModifiers(node))) {
+      ITypeBinding localRefType = Types.getLocalRefType();
+      node.setType(ASTFactory.newType(ast, localRefType));
+      Types.addBinding(node, localRefType);
+
+      // Convert fragments to retained local refs.
+      for (VariableDeclarationFragment fragment : ASTUtil.getFragments(node)) {
+        IVariableBinding var = Types.getVariableBinding(fragment);
+        GeneratedVariableBinding newVar = new GeneratedVariableBinding(
+            var.getName(), var.getModifiers(), localRefType, false, false,
+            var.getDeclaringClass(), var.getDeclaringMethod());
+        localRefs.put(var, newVar);
+
+        Expression initializer = fragment.getInitializer();
+        if (localRefs.containsKey(Types.getBinding(initializer))) {
+          initializer.accept(this);
+        } else {
+          // Create a constructor for a ScopedLocalRef for this fragment.
+          IMethodBinding constructor = null;
+          for (IMethodBinding m : localRefType.getDeclaredMethods()) {
+            if (m.isConstructor()) {
+              constructor = m;
+              break;
+            }
+          }
+          assert constructor != null : "failed finding ScopedLocalRef(var)";
+          ClassInstanceCreation newInvocation = ASTFactory.newClassInstanceCreation(ast, constructor);
+          ASTUtil.getArguments(newInvocation).add(NodeCopier.copySubtree(ast, initializer));
+          fragment.setInitializer(newInvocation);
+          Types.addBinding(fragment, newVar);
+        }
+      }
+    }
   }
 
   @Override
@@ -742,6 +784,65 @@ public class Rewriter extends ErrorReportingASTVisitor {
         ASTUtil.getFragments(newDecl).addAll(fragments.subList(1, fragments.size()));
         bodyDecls.add(++location, newDecl);
       }
+    }
+  }
+
+  @Override
+  public boolean visit(QualifiedName node) {
+    // Check for ScopedLocalRefs.
+    IBinding var = Types.getBinding(node);
+    if (var instanceof IVariableBinding) {
+      IVariableBinding localRef = localRefs.get(Types.getBinding(node.getQualifier()));
+      if (localRef != null) {
+        AST ast = node.getAST();
+        SimpleName localRefField =
+            ASTFactory.newSimpleName(ast, Types.getLocalRefType().getDeclaredFields()[0]);
+        Expression newQualifier = NodeCopier.copySubtree(ast, node.getQualifier());
+        Types.addBinding(newQualifier, localRef);
+        FieldAccess localRefAccess = ASTFactory.newFieldAccess(
+            ast, Types.getVariableBinding(localRefField), newQualifier);
+        CastExpression newCast = ASTFactory.newCastExpression(
+            ast, localRefAccess, Types.getTypeBinding(node.getQualifier()));
+        ParenthesizedExpression newParens = ASTFactory.newParenthesizedExpression(ast, newCast);
+        FieldAccess access = ASTFactory.newFieldAccess(ast, (IVariableBinding) var, newParens);
+        ASTUtil.setProperty(node, access);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Override
+  public void endVisit(SimpleName node) {
+    // Check for enum fields with reserved names.
+    IVariableBinding var = Types.getVariableBinding(node);
+    if (var != null) {
+      var = var.getVariableDeclaration();
+      ITypeBinding type = var.getDeclaringClass();
+      if (type != null && !type.isArray()) {
+        String fieldName = NameTable.getName(var);
+        while ((type = type.getSuperclass()) != null) {
+          for (IVariableBinding superField : type.getDeclaredFields()) {
+            if (superField.getName().equals(fieldName)) {
+              fieldName += '_' + NameTable.getName(var.getDeclaringClass());
+              NameTable.rename(var, fieldName);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Check for ScopedLocalRefs.
+    IVariableBinding localRef = localRefs.get(Types.getBinding(node));
+    if (localRef != null) {
+      AST ast = node.getAST();
+      FieldAccess access = ASTFactory.newFieldAccess(ast,
+          Types.getLocalRefType().getDeclaredFields()[0], ASTFactory.newSimpleName(ast, localRef));
+      CastExpression newCast = ASTFactory.newCastExpression(
+          ast, access, Types.getTypeBinding(node));
+      ParenthesizedExpression newParens = ASTFactory.newParenthesizedExpression(ast, newCast);
+      ASTUtil.setProperty(node, newParens);
     }
   }
 

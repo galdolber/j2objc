@@ -24,6 +24,9 @@ include environment.mk
 
 SUPPORT_SOURCES = \
     JSR166TestCase.java \
+    android/test/MoreAsserts.java \
+    android/text/SpannableTest.java \
+    libcore/java/net/customstreamhandler/http/Handler.java \
     libcore/java/nio/charset/Charset_TestGenerator.java \
     libcore/java/nio/charset/OldCharset_AbstractTest.java \
     libcore/java/util/ServiceLoaderTestInterface.java \
@@ -40,6 +43,7 @@ SUPPORT_SOURCES = \
     tests/support/Support_ASimpleReader.java \
     tests/support/Support_ASimpleWriter.java \
     tests/support/Support_CollectionTest.java \
+    tests/support/Support_Field.java \
     tests/support/Support_GetPutFields.java \
     tests/support/Support_GetPutFieldsDefaulted.java \
     tests/support/Support_GetPutFieldsDeprecated.java \
@@ -107,6 +111,9 @@ TEST_SOURCES = \
     SynchronousQueueTest.java \
     ThreadPoolExecutorTest.java \
     TimeUnitTest.java \
+    android/text/SpannableStringBuilderTest.java \
+    android/text/SpannableStringTest.java \
+    android/text/TextUtilsTest.java \
     java/lang/ClassTest.java \
     java/lang/ThrowableTest.java \
     java/lang/ref/PhantomReferenceTest.java \
@@ -197,12 +204,19 @@ TEST_SOURCES = \
     libcore/java/lang/reflect/AnnotationsTest.java \
     libcore/java/lang/reflect/ArrayTest.java \
     libcore/java/lang/reflect/ConstructorTest.java \
+    libcore/java/lang/reflect/FieldTest.java \
     libcore/java/net/DatagramSocketTest.java \
     libcore/java/net/InetAddressTest.java \
     libcore/java/net/InetSocketAddressTest.java \
     libcore/java/net/NetworkInterfaceTest.java \
+    libcore/java/net/OldAuthenticatorTest.java \
+    libcore/java/net/OldPasswordAuthenticationTest.java \
     libcore/java/net/ServerSocketTest.java \
+    libcore/java/net/SocketTest.java \
     libcore/java/net/URITest.java \
+    libcore/java/net/UrlEncodingTest.java \
+    libcore/java/net/URLStreamHandlerFactoryTest.java \
+    libcore/java/net/URLTest.java \
     libcore/java/nio/BufferTest.java \
     libcore/java/nio/NoArrayTest.java \
     libcore/java/nio/OldAndroidNIOTest.java \
@@ -219,6 +233,7 @@ TEST_SOURCES = \
     libcore/java/util/BitSetTest.java \
     libcore/java/util/CalendarTest.java \
     libcore/java/util/FormatterTest.java \
+    libcore/java/util/ObjectsTest.java \
     libcore/java/util/OldAndroidArrayListTest.java \
     libcore/java/util/OldTimeZoneTest.java \
     libcore/java/util/ServiceLoaderTest.java \
@@ -288,6 +303,7 @@ TEST_SOURCES = \
     org/apache/harmony/luni/tests/java/lang/ObjectTest.java \
     org/apache/harmony/luni/tests/java/lang/OutOfMemoryErrorTest.java \
     org/apache/harmony/luni/tests/java/lang/reflect/ArrayTest.java \
+    org/apache/harmony/luni/tests/java/lang/reflect/FieldTest.java \
     org/apache/harmony/luni/tests/java/lang/reflect/ModifierTest.java \
     org/apache/harmony/luni/tests/java/lang/RuntimeExceptionTest.java \
     org/apache/harmony/luni/tests/java/lang/ShortTest.java \

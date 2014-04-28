@@ -1,6 +1,4 @@
 <!--
-  Copyright 2011 Google Inc. All Rights Reserved.
-
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
@@ -22,9 +20,9 @@
   <groupId>com.google.j2objc</groupId>
   <artifactId>j2objc</artifactId>
   <packaging>pom</packaging>
-  <version>0.8</version>
+  <version>0.9.1</version>
   <name>j2objc</name>
-  <url>https://code.google.com/p/j2objc/</url>
+  <url>https://github.com/google/j2objc/</url>
 
   <build>
     <directory>build_result</directory>
@@ -65,9 +63,9 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.core</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.core.contenttype</artifactId>
-      <version>3.4.100.v20100505-1235</version>
+      <version>3.4.200.v20130326-1255</version>
       <exclusions>
         <exclusion>
           <groupId>org.eclipse.equinox</groupId>
@@ -77,15 +75,15 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.core</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.core.jobs</artifactId>
-      <version>3.5.0.v20100515</version>
+      <version>3.5.300.v20130429-1813</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.core</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.core.resources</artifactId>
-      <version>3.6.0.v20100526-0737</version>
+      <version>3.8.101.v20130717-0806</version>
       <exclusions>
         <exclusion>
           <groupId>org.eclipse.core</groupId>
@@ -99,45 +97,53 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.core</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.core.runtime</artifactId>
-      <version>3.6.0.v20100505</version>
+      <version>3.9.0.v20130326-1255</version>
       <exclusions>
         <exclusion>
           <groupId>org.eclipse.equinox</groupId>
           <artifactId>org.eclipse.equinox.app</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.eclipse.equinox</groupId>
+          <artifactId>org.eclipse.equinox.registry</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.eclipse.core.runtime.compatibility</groupId>
+          <artifactId>auth</artifactId>
+        </exclusion>
       </exclusions>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.equinox</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.equinox.common</artifactId>
-      <version>3.6.0.v20100503</version>
+      <version>3.6.200.v20130402-1505</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.equinox</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.equinox.preferences</artifactId>
-      <version>3.3.0.v20100503</version>
+      <version>3.5.100.v20130422-1538</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.tycho</groupId>
       <artifactId>org.eclipse.jdt.core</artifactId>
-      <version>3.8.1.v20120531-0637</version>
+      <version>3.9.1.v20130905-0837</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.osgi</groupId>
+      <groupId>org.eclipse.birt.runtime</groupId>
       <artifactId>org.eclipse.osgi</artifactId>
-      <version>3.6.0.v20100517</version>
+      <version>3.9.1.v20130814-1242</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.jibx.config.3rdparty.org.eclipse</groupId>
+      <groupId>org.eclipse.text</groupId>
       <artifactId>org.eclipse.text</artifactId>
-      <version>3.5.100.v20110505-0800</version>
+      <version>3.5.101</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -151,11 +157,6 @@
       <artifactId>mockito-core</artifactId>
       <version>1.9.5</version>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.squareup.okhttp</groupId>
-      <artifactId>okhttp</artifactId>
-      <version>1.3.0</version>
     </dependency>
   </dependencies>
 </project>

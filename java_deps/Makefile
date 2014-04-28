@@ -23,7 +23,7 @@ include jars.mk
 
 DISTRIBUTION_JARS = $(ECLIPSE_JARS) $(GUAVA_JAR) $(JSR305_JAR) $(JUNIT_JAR) $(MOCKITO_JAR)
 INTERNAL_JARS = $(JUNIT_SOURCE_JAR) $(HAMCREST_SOURCE_JAR) $(JSR305_SOURCE_JAR) \
-    $(MOCKITO_SOURCE_JAR) $(OKHTTP_JAR) $(OKHTTP_SOURCE_JAR)
+    $(MOCKITO_SOURCE_JAR)
 DIST_JARS = $(DISTRIBUTION_JARS:%=$(DIST_JAR_DIR)/%)
 BUILD_DIR_JARS = $(DISTRIBUTION_JARS:%=$(BUILD_DIR)/%) $(INTERNAL_JARS:%=$(BUILD_DIR)/%)
 
@@ -35,7 +35,6 @@ JUNIT_DIR = $(M2_HOME)/repository/junit/junit/4.10
 JSR305_DIR = $(M2_HOME)/repository/com/google/code/findbugs/jsr305/2.0.2
 HAMCREST_DIR = $(M2_HOME)/repository/org/hamcrest/hamcrest-core/1.1
 MOCKITO_DIR = $(M2_HOME)/repository/org/mockito/mockito-core/1.9.5
-OKHTTP_DIR = $(M2_HOME)/repository/com/squareup/okhttp/okhttp/1.3.0
 
 MAVEN_RESULTS = $(DISTRIBUTION_JARS:%=$(BUILD_DIR)/%) $(JUNIT_DIR)/$(JUNIT_SOURCE_JAR)
 $(MAVEN_RESULTS): $(BUILD_DIR)/.maven_generate
@@ -55,9 +54,6 @@ $(BUILD_DIR)/$(JSR305_SOURCE_JAR): $(JSR305_DIR)/$(JSR305_SOURCE_JAR) | $(BUILD_
 
 $(BUILD_DIR)/$(MOCKITO_SOURCE_JAR): $(MOCKITO_DIR)/$(MOCKITO_SOURCE_JAR) | $(BUILD_DIR)
 	@cp -f $< $@
-
-$(BUILD_DIR)/%.jar: $(OKHTTP_DIR)/%.jar | $(BUILD_DIR)
-	@cp -f $^ $@
 
 $(BUILD_DIR) $(DIST_JAR_DIR):
 	@mkdir -p $@

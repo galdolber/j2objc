@@ -16,7 +16,9 @@
 
 package com.google.devtools.j2objc.gen;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Function;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.types.IOSMethod;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
@@ -26,11 +28,11 @@ import com.google.devtools.j2objc.util.ASTUtil;
 import com.google.devtools.j2objc.util.BindingUtil;
 import com.google.devtools.j2objc.util.NameTable;
 
+import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.EnumDeclaration;
-import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -90,114 +92,40 @@ public abstract class ObjectiveCSourceFileGenerator extends SourceFileGenerator 
     save(getOutputFileName(node));
   }
 
-  protected void printStaticFieldAccessors(
-      List<FieldDeclaration> fields, List<MethodDeclaration> methods, boolean isInterface) {
-    printStaticFieldAccessors(getStaticFieldsNeedingAccessorsOld(fields, isInterface), methods);
-  }
-
-  protected List<IVariableBinding> getStaticFieldsNeedingAccessorsOld(
-            List<FieldDeclaration> fields, boolean isInterface) {
-    List<IVariableBinding> bindings = Lists.newArrayList();
-    for (FieldDeclaration f : fields) {
-      if (Modifier.isStatic(f.getModifiers()) || isInterface) {
-        for (VariableDeclarationFragment var : ASTUtil.getFragments(f)) {
-          IVariableBinding binding = Types.getVariableBinding(var);
-          bindings.add(binding);
-        }
-      }
+  private static final Function<ASTNode, IVariableBinding> GET_VARIABLE_BINDING_FUNC =
+      new Function<ASTNode, IVariableBinding>() {
+    public IVariableBinding apply(ASTNode node) {
+      return Types.getVariableBinding(node);
     }
-    return bindings;
-  }
+  };
 
-  private void printStaticFieldAccessors(
-      List<IVariableBinding> bindings, List<MethodDeclaration> methods) {
-    for (IVariableBinding binding : bindings) {
-      if (needsGetter(binding, methods)) {
-        printStaticFieldGetter(binding);
-      }
-      if (!Modifier.isFinal(binding.getModifiers())) {
-        if (binding.getType().isPrimitive()) {
-          printStaticFieldReferenceGetter(binding);
-        } else {
-          printStaticFieldSetter(binding);
-        }
-      }
+  private static final Predicate<ASTNode> IS_STATIC_VARIABLE_PRED = new Predicate<ASTNode>() {
+    public boolean apply(ASTNode node) {
+      return BindingUtil.isStatic(Types.getVariableBinding(node));
     }
-  }
+  };
 
-  /**
-   * Returns true if a getter method is needed for a specified field.  The
-   * heuristic used is to find a method that has the same name, returns the
-   * same type, and has no parameters.  Obviously, lousy code can fail this
-   * test, but it should work in practice with existing Java code standards.
-   */
-  private boolean needsGetter(IVariableBinding var, List<MethodDeclaration> methods) {
-    String accessorName = NameTable.getStaticAccessorName(var.getName());
-    ITypeBinding type = var.getType();
-    for (MethodDeclaration methodDecl : methods) {
-      IMethodBinding method = Types.getMethodBinding(methodDecl);
-      if (method.getName().equals(accessorName) && method.getReturnType().isEqualTo(type)
-          && method.getParameterTypes().length == 0) {
-        return false;
-      }
+  private static final Predicate<VariableDeclarationFragment> NEEDS_INITIALIZATION_PRED =
+      new Predicate<VariableDeclarationFragment>() {
+    public boolean apply(VariableDeclarationFragment frag) {
+      IVariableBinding binding = Types.getVariableBinding(frag);
+      return BindingUtil.isStatic(binding) && !BindingUtil.isPrimitiveConstant(binding);
     }
-    return true;
-  }
+  };
 
-  protected abstract void printStaticFieldGetter(IVariableBinding var);
-
-  protected abstract void printStaticFieldReferenceGetter(IVariableBinding var);
-
-  protected abstract void printStaticFieldSetter(IVariableBinding var);
-
-  protected String staticFieldGetterSignature(IVariableBinding var) {
-    String objcType = NameTable.getObjCType(var.getType());
-    String accessorName = NameTable.getStaticAccessorName(var.getName());
-    return String.format("+ (%s)%s", objcType, accessorName);
-  }
-
-  protected String staticFieldReferenceGetterSignature(IVariableBinding var) {
-    String objcType = NameTable.getObjCType(var.getType());
-    String accessorName = NameTable.getStaticAccessorName(var.getName());
-    return String.format("+ (%s *)%sRef", objcType, accessorName);
-  }
-
-  protected String staticFieldSetterSignature(IVariableBinding var) {
-    String objcType = NameTable.getObjCType(var.getType());
-    String paramName = NameTable.getName(var);
-    return String.format("+ (void)set%s:(%s)%s",
-        NameTable.capitalize(var.getName()), objcType, paramName);
-  }
-
-  protected List<IVariableBinding> getStaticFieldsNeedingAccessors(
-      List<FieldDeclaration> fields, boolean isInterface) {
-    List<IVariableBinding> bindings = Lists.newArrayList();
-    for (FieldDeclaration f : fields) {
-      if (Modifier.isStatic(f.getModifiers()) || isInterface) {
-        for (VariableDeclarationFragment var : ASTUtil.getFragments(f)) {
-          bindings.add(Types.getVariableBinding(var));
-        }
-      }
-    }
-    return bindings;
+  protected Iterable<IVariableBinding> getStaticFieldsNeedingAccessors(
+      AbstractTypeDeclaration node) {
+    return Iterables.transform(
+        Iterables.filter(ASTUtil.getAllFields(node), IS_STATIC_VARIABLE_PRED),
+        GET_VARIABLE_BINDING_FUNC);
   }
 
   /**
    * Excludes primitive constants which will not have variables declared for them.
    */
-  protected List<VariableDeclarationFragment> getStaticFieldsNeedingInitialization(
-      List<FieldDeclaration> fields, boolean isInterface) {
-    List<VariableDeclarationFragment> fragments = Lists.newArrayList();
-    for (FieldDeclaration f : fields) {
-      if (Modifier.isStatic(f.getModifiers()) || isInterface) {
-        for (VariableDeclarationFragment var : ASTUtil.getFragments(f)) {
-          if (!BindingUtil.isPrimitiveConstant(Types.getVariableBinding(var))) {
-            fragments.add(var);
-          }
-        }
-      }
-    }
-    return fragments;
+  protected Iterable<VariableDeclarationFragment> getStaticFieldsNeedingInitialization(
+      AbstractTypeDeclaration node) {
+    return Iterables.filter(ASTUtil.getAllFields(node), NEEDS_INITIALIZATION_PRED);
   }
 
   protected boolean isInitializeMethod(MethodDeclaration m) {

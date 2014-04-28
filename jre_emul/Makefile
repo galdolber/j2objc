@@ -163,19 +163,53 @@ JRE_INTERFACES = \
 # Java sources to be translated normally.
 JAVA_SOURCES = \
 	android/os/SystemClock.java \
+	android/test/suitebuilder/annotation/LargeTest.java \
+	android/test/suitebuilder/annotation/MediumTest.java \
+	android/test/suitebuilder/annotation/SmallTest.java \
+	android/test/suitebuilder/annotation/Smoke.java \
+	android/test/suitebuilder/annotation/Suppress.java \
+	android/text/Editable.java \
+	android/text/GetChars.java \
+	android/text/InputFilter.java \
+	android/text/InputType.java \
+	android/text/NoCopySpan.java \
+	android/text/Selection.java \
+	android/text/Spannable.java \
+	android/text/SpannableString.java \
+	android/text/SpannableStringBuilder.java \
+	android/text/SpannableStringInternal.java \
+	android/text/Spanned.java \
+	android/text/SpannedString.java \
+	android/text/SpanSet.java \
+	android/text/SpanWatcher.java \
+	android/text/TextUtils.java \
+	android/text/TextWatcher.java \
+	android/text/util/Rfc822Token.java \
+	android/text/util/Rfc822Tokenizer.java \
+	android/util/ArrayMap.java \
+	android/util/ArraySet.java \
 	android/util/ContainerHelpers.java \
 	android/util/Log.java \
 	android/util/LruCache.java \
+	android/util/MapCollections.java \
 	android/util/Pair.java \
+	android/util/Printer.java \
 	android/util/SparseArray.java \
 	android/util/SparseBooleanArray.java \
 	android/util/SparseIntArray.java \
 	android/util/SparseLongArray.java \
 	com/android/internal/util/ArrayUtils.java \
+	com/google/android/collect/Lists.java \
+	com/google/android/collect/Maps.java \
+	com/google/android/collect/Sets.java \
+	com/google/j2objc/net/IosHttpHandler.java \
+	com/google/j2objc/net/IosHttpsHandler.java \
+	com/google/j2objc/net/IosHttpURLConnection.java \
 	com/google/j2objc/security/IosMD5MessageDigest.java \
 	com/google/j2objc/security/IosSecureRandomImpl.java \
 	com/google/j2objc/security/IosSecurityProvider.java \
 	com/google/j2objc/security/IosSHAMessageDigest.java \
+	com/google/j2objc/util/ScopedLocalRef.java \
 	dalvik/system/BlockGuard.java \
 	dalvik/system/CloseGuard.java \
 	java/beans/IndexedPropertyChangeEvent.java \
@@ -361,10 +395,14 @@ JAVA_SOURCES = \
 	java/math/Primality.java \
 	java/math/RoundingMode.java \
 	java/net/AddressCache.java \
+	java/net/Authenticator.java \
 	java/net/BindException.java \
+	java/net/CacheRequest.java \
+	java/net/CacheResponse.java \
 	java/net/ConnectException.java \
 	java/net/ContentHandler.java \
 	java/net/ContentHandlerFactory.java \
+	java/net/CookieHandler.java \
 	java/net/DatagramPacket.java \
 	java/net/DatagramSocket.java \
 	java/net/DatagramSocketImpl.java \
@@ -383,12 +421,16 @@ JAVA_SOURCES = \
 	java/net/MalformedURLException.java \
 	java/net/MulticastSocket.java \
 	java/net/NetworkInterface.java \
+	java/net/PasswordAuthentication.java \
 	java/net/PlainDatagramSocketImpl.java \
 	java/net/PlainServerSocketImpl.java \
 	java/net/PlainSocketImpl.java \
 	java/net/PortUnreachableException.java \
 	java/net/ProtocolException.java \
 	java/net/Proxy.java \
+	java/net/ProxySelector.java \
+	java/net/ProxySelectorImpl.java \
+	java/net/ResponseCache.java \
 	java/net/ServerSocket.java \
 	java/net/Socket.java \
 	java/net/SocketAddress.java \
@@ -637,6 +679,7 @@ JAVA_SOURCES = \
 	java/util/MissingFormatWidthException.java \
 	java/util/MissingResourceException.java \
 	java/util/NoSuchElementException.java \
+	java/util/Objects.java \
 	java/util/Observable.java \
 	java/util/PriorityQueue.java \
 	java/util/Properties.java \
@@ -763,34 +806,6 @@ JAVA_SOURCES = \
 	java/util/zip/ZipFile.java \
 	java/util/zip/ZipInputStream.java \
 	java/util/zip/ZipOutputStream.java \
-	javax/net/DefaultServerSocketFactory.java \
-	javax/net/DefaultSocketFactory.java \
-	javax/net/ServerSocketFactory.java \
-	javax/net/SocketFactory.java \
-	javax/net/ssl/DefaultHostnameVerifier.java \
-	javax/net/ssl/DefaultSSLServerSocketFactory.java \
-	javax/net/ssl/DefaultSSLSocketFactory.java \
-	javax/net/ssl/DistinguishedNameParser.java \
-	javax/net/ssl/HandshakeCompletedEvent.java \
-	javax/net/ssl/HandshakeCompletedListener.java \
-	javax/net/ssl/HostnameVerifier.java \
-	javax/net/ssl/HttpsURLConnection.java \
-	javax/net/ssl/KeyManager.java \
-	javax/net/ssl/SSLContext.java \
-	javax/net/ssl/SSLContextSpi.java \
-	javax/net/ssl/SSLEngine.java \
-	javax/net/ssl/SSLEngineResult.java \
-	javax/net/ssl/SSLException.java \
-	javax/net/ssl/SSLHandshakeException.java \
-	javax/net/ssl/SSLParameters.java \
-	javax/net/ssl/SSLPeerUnverifiedException.java \
-	javax/net/ssl/SSLProtocolException.java \
-	javax/net/ssl/SSLServerSocketFactory.java \
-	javax/net/ssl/SSLSession.java \
-	javax/net/ssl/SSLSessionContext.java \
-	javax/net/ssl/SSLSocket.java \
-	javax/net/ssl/SSLSocketFactory.java \
-	javax/net/ssl/TrustManager.java \
 	javax/security/auth/x500/X500Principal.java \
 	javax/security/cert/Certificate.java \
 	javax/security/cert/CertificateEncodingException.java \
@@ -834,6 +849,7 @@ JAVA_SOURCES = \
 	libcore/io/StructAddrinfo.java \
 	libcore/io/StructFlock.java \
 	libcore/io/StructGroupReq.java \
+	libcore/io/StructGroupSourceReq.java \
 	libcore/io/StructLinger.java \
 	libcore/io/StructPollfd.java \
 	libcore/io/StructStat.java \

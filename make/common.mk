@@ -39,7 +39,6 @@ ifndef J2OBJC_ARCHS
 J2OBJC_ARCHS = macosx iphone iphone64 iphonev7s simulator
 endif
 
-
 # xcrun finds a specified tool in the current SDK /usr/bin directory.
 XCRUN = $(shell if test -f /usr/bin/xcrun; then echo xcrun; else echo ""; fi)
 # xcrun can fail when run concurrently, so we find all the tools up-front.
@@ -80,9 +79,14 @@ endif
 ifdef GCC_OPTIMIZATION_LEVEL
 OPTIMIZATION_LEVEL = $(GCC_OPTIMIZATION_LEVEL)
 endif
-ifdef OPTIMIZATION_LEVEL
-DEBUGFLAGS := $(DEBUGFLAGS) -O$(OPTIMIZATION_LEVEL)
+ifndef OPTIMIZATION_LEVEL
+ifdef DEBUG
+OPTIMIZATION_LEVEL = 0  # None
+else
+OPTIMIZATION_LEVEL = s  # Fastest, smallest
 endif
+endif
+DEBUGFLAGS := $(DEBUGFLAGS) -O$(OPTIMIZATION_LEVEL)
 
 ifdef GCC_PREPROCESSOR_DEFINITIONS
 DEBUGFLAGS += $(GCC_PREPROCESSOR_DEFINITIONS:%=-D%)

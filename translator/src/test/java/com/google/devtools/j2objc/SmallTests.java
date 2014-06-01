@@ -28,12 +28,14 @@ import com.google.devtools.j2objc.gen.PrimitiveArrayTest;
 import com.google.devtools.j2objc.gen.StatementGeneratorTest;
 import com.google.devtools.j2objc.translate.ASTFactoryTest;
 import com.google.devtools.j2objc.translate.AnonymousClassConverterTest;
+import com.google.devtools.j2objc.translate.ArrayRewriterTest;
 import com.google.devtools.j2objc.translate.AutoboxerTest;
 import com.google.devtools.j2objc.translate.ComplexExpressionExtractorTest;
 import com.google.devtools.j2objc.translate.CopyAllFieldsWriterTest;
 import com.google.devtools.j2objc.translate.DeadCodeEliminatorTest;
 import com.google.devtools.j2objc.translate.DestructorGeneratorTest;
 import com.google.devtools.j2objc.translate.EnhancedForRewriterTest;
+import com.google.devtools.j2objc.translate.FunctionizerTest;
 import com.google.devtools.j2objc.translate.GwtConverterTest;
 import com.google.devtools.j2objc.translate.InitializationNormalizerTest;
 import com.google.devtools.j2objc.translate.InnerClassExtractorTest;
@@ -73,6 +75,7 @@ public class SmallTests {
     AnonymousClassConverterTest.class,
     ArrayAccessTest.class,
     ArrayCreationTest.class,
+    ArrayRewriterTest.class,
     AutoboxerTest.class,
     BindingMapBuilderTest.class,
     BindingUtilTest.class,
@@ -83,6 +86,7 @@ public class SmallTests {
     DestructorGeneratorTest.class,
     EnhancedForRewriterTest.class,
     ErrorReportingASTVisitorTest.class,
+    FunctionizerTest.class,
     GwtConverterTest.class,
     HeaderImportCollectorTest.class,
     HiddenFieldDetectorTest.class,

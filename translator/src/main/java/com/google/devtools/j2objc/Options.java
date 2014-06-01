@@ -72,6 +72,8 @@ public class Options {
   private static boolean stripReflection = false;
   private static boolean extractUnsequencedModifications = false;
   private static boolean docCommentsEnabled = false;
+  private static boolean finalMethodsAsFunctions = false;
+  private static int batchTranslateMaximum = 0;
 
   private static File proGuardUsageFile = null;
 
@@ -88,6 +90,7 @@ public class Options {
   private static final String XBOOTCLASSPATH = "-Xbootclasspath:";
   private static String bootclasspath = System.getProperty("sun.boot.class.path");
   private static Map<String, String> packagePrefixes = Maps.newHashMap();
+  private static final String BATCH_PROCESSING_MAX_FLAG = "--batch-translate-max=";
 
   static {
     // Load string resources.
@@ -111,8 +114,12 @@ public class Options {
   private static final MemoryManagementOption DEFAULT_MEMORY_MANAGEMENT_OPTION =
       MemoryManagementOption.REFERENCE_COUNTING;
 
-  // Share a single logger so it's level is easily configurable.
-  private static final Logger logger = Logger.getLogger(J2ObjC.class.getName());
+  /**
+   * Set all log handlers in this package with a common level.
+   */
+  private static void setLogLevel(Level level) {
+    Logger.getLogger("com.google.devtools.j2objc").setLevel(level);
+  }
 
   /**
    * Load the options from a command-line, returning the arguments that were
@@ -121,7 +128,7 @@ public class Options {
    * @throws IOException
    */
   public static String[] load(String[] args) throws IOException {
-    logger.setLevel(Level.INFO);
+    setLogLevel(Level.INFO);
 
     // Create a temporary directory as the sourcepath's first entry, so that
     // modified sources will take precedence over regular files.
@@ -211,11 +218,11 @@ public class Options {
       } else if (arg.equals("--generate-deprecated")) {
         deprecatedDeclarations = true;
       } else if (arg.equals("-q") || arg.equals("--quiet")) {
-        logger.setLevel(Level.WARNING);
+        setLogLevel(Level.WARNING);
       } else if (arg.equals("-t") || arg.equals("--timing-info")) {
-        logger.setLevel(Level.FINE);
+        setLogLevel(Level.FINE);
       } else if (arg.equals("-v") || arg.equals("--verbose")) {
-        logger.setLevel(Level.FINEST);
+        setLogLevel(Level.FINEST);
       } else if (arg.startsWith(XBOOTCLASSPATH)) {
         bootclasspath = arg.substring(XBOOTCLASSPATH.length());
       } else if (arg.equals("-Xno-jsni-delimiters")) {
@@ -241,8 +248,6 @@ public class Options {
         stripGwtIncompatible = true;
       } else if (arg.equals("--strip-reflection")) {
         stripReflection = true;
-      } else if (arg.equals("--generate-test-main") || arg.equals("--no-generate-test-main")) {
-        // obsolete
       } else if (arg.equals("--segmented-headers")) {
         segmentedHeaders = true;
       } else if (arg.equals("--build-closure")) {
@@ -251,6 +256,11 @@ public class Options {
         extractUnsequencedModifications = true;
       } else if (arg.equals("--doc-comments")) {
         docCommentsEnabled = true;
+      } else if (arg.startsWith(BATCH_PROCESSING_MAX_FLAG)) {
+        batchTranslateMaximum =
+            Integer.parseInt(arg.substring(BATCH_PROCESSING_MAX_FLAG.length()));
+      } else if (arg.equals("--final-methods-as-functions")) {
+        finalMethodsAsFunctions = true;
       } else if (arg.startsWith("-h") || arg.equals("--help")) {
         help(false);
       } else if (arg.startsWith("-")) {
@@ -622,5 +632,23 @@ public class Options {
   @VisibleForTesting
   public static void resetExtractUnsequencedModifications() {
     extractUnsequencedModifications = false;
+  }
+
+  public static int batchTranslateMaximum() {
+    return batchTranslateMaximum;
+  }
+
+  public static boolean finalMethodsAsFunctions() {
+    return finalMethodsAsFunctions;
+  }
+
+  @VisibleForTesting
+  public static void enableFinalMethodsAsFunctions() {
+    finalMethodsAsFunctions = true;
+  }
+
+  @VisibleForTesting
+  public static void resetFinalMethodsAsFunctions() {
+    finalMethodsAsFunctions = false;
   }
 }

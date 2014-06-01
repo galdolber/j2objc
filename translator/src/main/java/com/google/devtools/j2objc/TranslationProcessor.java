@@ -26,6 +26,7 @@ import com.google.devtools.j2objc.translate.ComplexExpressionExtractor;
 import com.google.devtools.j2objc.translate.CopyAllFieldsWriter;
 import com.google.devtools.j2objc.translate.DestructorGenerator;
 import com.google.devtools.j2objc.translate.EnhancedForRewriter;
+import com.google.devtools.j2objc.translate.Functionizer;
 import com.google.devtools.j2objc.translate.GwtConverter;
 import com.google.devtools.j2objc.translate.InitializationNormalizer;
 import com.google.devtools.j2objc.translate.InnerClassExtractor;
@@ -236,6 +237,11 @@ class TranslationProcessor extends FileProcessor {
     new OperatorRewriter().run(unit);
     ticker.tick("OperatorRewriter");
 
+    if (Options.finalMethodsAsFunctions()) {
+      new Functionizer().run(unit);
+      ticker.tick("Functionizer");
+    }
+
     for (Plugin plugin : Options.getPlugins()) {
       plugin.processUnit(unit);
     }
@@ -275,6 +281,10 @@ class TranslationProcessor extends FileProcessor {
           "Translated %d %s: %d errors, %d warnings",
           nFiles, nFiles == 1 ? "file" : "files", ErrorUtil.errorCount(),
           ErrorUtil.warningCount()));
+      if (Options.finalMethodsAsFunctions()) {
+        System.out.println(String.format("Translated %d methods as functions",
+            ErrorUtil.functionizedMethodCount()));
+      }
     }
   }
 

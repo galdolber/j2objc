@@ -24,45 +24,35 @@
  * @define PRIMITIVE_ARRAY_CTOR_IMPL
  */
 #define PRIMITIVE_ARRAY_CTOR_IMPL(U_NAME, C_TYPE) \
-  static IOS##U_NAME##Array *IOS##U_NAME##Array_NewArray(NSUInteger length) { \
-    IOS##U_NAME##Array *array = [IOS##U_NAME##Array alloc]; \
+  static IOS##U_NAME##Array *IOS##U_NAME##Array_NewArray(jint length) { \
+    IOS##U_NAME##Array *array = NSAllocateObject( \
+        [IOS##U_NAME##Array class], length * sizeof(C_TYPE), nil); \
     array->size_ = length; \
-    array->buffer_ = calloc(length, sizeof(C_TYPE)); \
     return array; \
   } \
   \
   static IOS##U_NAME##Array *IOS##U_NAME##Array_NewArrayWith##U_NAME##s( \
-      NSUInteger length, const C_TYPE *buf) { \
+      jint length, const C_TYPE *buf) { \
     IOS##U_NAME##Array *array = IOS##U_NAME##Array_NewArray(length); \
     memcpy(array->buffer_, buf, length * sizeof(C_TYPE)); \
     return array; \
   } \
   \
-  + (id)newArrayWithLength:(NSUInteger)length { \
-    return IOS##U_NAME##Array_NewArray(length); \
+  + (instancetype)newArrayWithLength:(NSUInteger)length { \
+    return IOS##U_NAME##Array_NewArray((jint)length); \
   } \
   \
-  + (id)arrayWithLength:(NSUInteger)length { \
-    return [IOS##U_NAME##Array_NewArray(length) autorelease]; \
+  + (instancetype)arrayWithLength:(NSUInteger)length { \
+    return [IOS##U_NAME##Array_NewArray((jint)length) autorelease]; \
   } \
   \
-  + (id)newArrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
-    return IOS##U_NAME##Array_NewArrayWith##U_NAME##s(count, buf); \
+  + (instancetype)newArrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
+    return IOS##U_NAME##Array_NewArrayWith##U_NAME##s((jint)count, buf); \
   } \
   \
-  + (id)arrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
-    return [IOS##U_NAME##Array_NewArrayWith##U_NAME##s(count, buf) autorelease]; \
+  + (instancetype)arrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
+    return [IOS##U_NAME##Array_NewArrayWith##U_NAME##s((jint)count, buf) autorelease]; \
   }
-
-/*!
- * Implements the dealloc method for primitive arrays.
- * @define PRIMITIVE_ARRAY_DEALLOC_IMPL
- */
-#define PRIMITIVE_ARRAY_DEALLOC_IMPL \
-  - (void)dealloc { \
-    free(buffer_); \
-    [super dealloc]; \
-  } \
 
 /*!
  * Implements the common accessor methods for the primitive array types.
@@ -70,34 +60,34 @@
  */
 #define PRIMITIVE_ARRAY_ACCESSORS_IMPL(L_NAME, U_NAME, C_TYPE) \
   C_TYPE IOS##U_NAME##Array_Get(__unsafe_unretained IOS##U_NAME##Array *array, NSUInteger index) { \
-    IOSArray_checkIndex(array->size_, index); \
+    IOSArray_checkIndex(array->size_, (jint)index); \
     return array->buffer_[index]; \
   } \
   \
   C_TYPE *IOS##U_NAME##Array_GetRef( \
       __unsafe_unretained IOS##U_NAME##Array *array, NSUInteger index) { \
-    IOSArray_checkIndex(array->size_, index); \
+    IOSArray_checkIndex(array->size_, (jint)index); \
     return &array->buffer_[index]; \
   } \
   \
   - (C_TYPE)L_NAME##AtIndex:(NSUInteger)index { \
-    IOSArray_checkIndex(size_, index); \
+    IOSArray_checkIndex(size_, (jint)index); \
     return buffer_[index]; \
   } \
   \
   - (C_TYPE *)L_NAME##RefAtIndex:(NSUInteger)index { \
-    IOSArray_checkIndex(size_, index); \
+    IOSArray_checkIndex(size_, (jint)index); \
     return &buffer_[index]; \
   } \
   \
   - (C_TYPE)replace##U_NAME##AtIndex:(NSUInteger)index with##U_NAME:(C_TYPE)value { \
-    IOSArray_checkIndex(size_, index); \
+    IOSArray_checkIndex(size_, (jint)index); \
     buffer_[index] = value; \
     return value; \
   } \
   \
   - (void)get##U_NAME##s:(C_TYPE *)buffer length:(NSUInteger)length { \
-    IOSArray_checkIndex(size_, length - 1); \
+    IOSArray_checkIndex(size_, (jint)length - 1); \
     memcpy(buffer, buffer_, length * sizeof(C_TYPE)); \
   }
 
@@ -106,18 +96,18 @@
  * @define PRIMITIVE_ARRAY_COPY_IMPL
  */
 #define PRIMITIVE_ARRAY_RANGE_COPY_IMPL(U_NAME, C_TYPE) \
-  - (void)arraycopy:(NSRange)sourceRange \
+  - (void)arraycopy:(jint)offset \
         destination:(IOSArray *)destination \
-             offset:(NSInteger)offset { \
-    IOSArray_checkRange(size_, sourceRange); \
-    IOSArray_checkRange(destination->size_, NSMakeRange(offset, sourceRange.length)); \
-    memmove(((IOS##U_NAME##Array *) destination)->buffer_ + offset, \
-            self->buffer_ + sourceRange.location, \
-            sourceRange.length * sizeof(C_TYPE)); \
+          dstOffset:(jint)dstOffset \
+             length:(jint)length { \
+    IOSArray_checkRange(size_, offset, length); \
+    IOSArray_checkRange(destination->size_, dstOffset, length); \
+    memmove(((IOS##U_NAME##Array *) destination)->buffer_ + dstOffset, \
+            self->buffer_ + offset, length * sizeof(C_TYPE)); \
   }
 
 #define PRIMITIVE_ARRAY_COPY_IMPL(U_NAME) \
-  - (id)copyWithZone:(NSZone *)zone { \
+  - (instancetype)copyWithZone:(NSZone *)zone { \
     return [IOS##U_NAME##Array newArrayWith##U_NAME##s:buffer_ count:size_]; \
   }
 
@@ -127,23 +117,22 @@
  * @define PRIMITIVE_ARRAY_IMPLEMENTATION
  * @param L_NAME Lowercase name of the primitive type. (e.g. "char")
  * @param U_NAME Uppercase name of the primitive type. (e.g. "Char")
- * @param C_TYPE Objective-C type for the primitive type, (e.g. "unichar")
+ * @param C_TYPE Objective-C type for the primitive type, (e.g. "jchar")
  */
 #define PRIMITIVE_ARRAY_IMPLEMENTATION(L_NAME, U_NAME, C_TYPE) \
   PRIMITIVE_ARRAY_CTOR_IMPL(U_NAME, C_TYPE) \
   PRIMITIVE_ARRAY_ACCESSORS_IMPL(L_NAME, U_NAME, C_TYPE) \
   PRIMITIVE_ARRAY_RANGE_COPY_IMPL(U_NAME, C_TYPE) \
-  PRIMITIVE_ARRAY_COPY_IMPL(U_NAME) \
-  PRIMITIVE_ARRAY_DEALLOC_IMPL
+  PRIMITIVE_ARRAY_COPY_IMPL(U_NAME)
 
 
 // ********** IOSBooleanArray **********
 
 @implementation IOSBooleanArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, BOOL)
+PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, jboolean)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%@", (buffer_[index] ? @"YES" : @"NO")];
 }
 
@@ -162,24 +151,18 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, BOOL)
 
 @implementation IOSCharArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, unichar)
+PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, jchar)
 
-+ (id)arrayWithNSString:(NSString *)string {
++ (instancetype)arrayWithNSString:(NSString *)string {
   NSUInteger length = [string length];
-  IOSCharArray *array = IOSCharArray_NewArray(length);
+  IOSCharArray *array = IOSCharArray_NewArray((jint)length);
   if (length > 0) {
     [string getCharacters:array->buffer_ range:NSMakeRange(0, length)];
   }
   return [array autorelease];
 }
 
-- (unichar *)getChars {
-  unichar *result = calloc(size_, sizeof(unichar));
-  [self getChars:result length:size_];
-  return result;
-}
-
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%C", buffer_[index]];
 }
 
@@ -198,23 +181,23 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, unichar)
 
 @implementation IOSByteArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, char)
+PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, jbyte)
 
-- (void)getBytes:(char *)buffer
-          offset:(NSUInteger)offset
-          length:(NSUInteger)length {
-  IOSArray_checkRange(size_, NSMakeRange(offset, length));
+- (void)getBytes:(jbyte *)buffer
+          offset:(jint)offset
+          length:(jint)length {
+  IOSArray_checkRange(size_, (jint)offset, (jint)length);
   memcpy(buffer, &buffer_[offset], length);
 }
 
-- (void)replaceBytes:(const char *)source
-              length:(NSUInteger)length
-              offset:(NSUInteger)destOffset {
-  IOSArray_checkRange(size_, NSMakeRange(destOffset, length));
+- (void)replaceBytes:(const jbyte *)source
+              length:(jint)length
+              offset:(jint)destOffset {
+  IOSArray_checkRange(size_, (jint)destOffset, (jint)length);
   memcpy(&buffer_[destOffset], source, length);
 }
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"0x%x", buffer_[index]];
 }
 
@@ -237,9 +220,9 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, char)
 
 @implementation IOSShortArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, short)
+PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, jshort)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%hi", buffer_[index]];
 }
 
@@ -258,9 +241,9 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, short)
 
 @implementation IOSIntArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, int)
+PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, jint)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%d", buffer_[index]];
 }
 
@@ -279,9 +262,9 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, int)
 
 @implementation IOSLongArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, long long)
+PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, jlong)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%lld", buffer_[index]];
 }
 
@@ -300,9 +283,9 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, long long)
 
 @implementation IOSFloatArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, float)
+PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, jfloat)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%g", buffer_[index]];
 }
 
@@ -321,9 +304,9 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, float)
 
 @implementation IOSDoubleArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(double, Double, double)
+PRIMITIVE_ARRAY_IMPLEMENTATION(double, Double, jdouble)
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%g", buffer_[index]];
 }
 

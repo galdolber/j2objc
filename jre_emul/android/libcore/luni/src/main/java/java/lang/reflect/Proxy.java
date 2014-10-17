@@ -280,8 +280,8 @@ public class Proxy implements Serializable {
     private static native Class generateProxy(String name, Class[] interfaces,
         ClassLoader loader) throws IllegalArgumentException /*-[
       Class proxyClass = objc_allocateClassPair([JavaLangReflectProxy class], [name UTF8String], 0);
-      unsigned interfaceCount = [interfaces count];
-      for (unsigned i = 0; i < interfaceCount; i++) {
+      jint interfaceCount = interfaces->size_;
+      for (jint i = 0; i < interfaceCount; i++) {
         IOSClass *intrface = (IOSClass *) [interfaces objectAtIndex:i];
         if (![intrface isInterface]) {
           @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc]
@@ -335,11 +335,11 @@ public class Proxy implements Serializable {
           JavaLangReflectMethod *method =
               [iosProtocol findMethodWithTranslatedName:NSStringFromSelector(selector)];
           IOSObjectArray *paramTypes = [method getParameterTypes];
-          NSUInteger numArgs = paramTypes->size_;
+          jint numArgs = paramTypes->size_;
           IOSObjectArray *args = [IOSObjectArray arrayWithLength:numArgs
                                                             type:[NSObject getClass]];
 
-          for (unsigned i = 0; i < numArgs; i++) {
+          for (jint i = 0; i < numArgs; i++) {
             J2ObjcRawValue arg;
             [anInvocation getArgument:&arg atIndex:i + 2];
             id javaArg = [paramTypes->buffer_[i] __boxValue:&arg];

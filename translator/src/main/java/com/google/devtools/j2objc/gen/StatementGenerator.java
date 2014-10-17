@@ -19,97 +19,92 @@ package com.google.devtools.j2objc.gen;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CharMatcher;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.devtools.j2objc.Options;
-import com.google.devtools.j2objc.translate.DestructorGenerator;
-import com.google.devtools.j2objc.types.GeneratedMethodBinding;
+import com.google.devtools.j2objc.ast.AnonymousClassDeclaration;
+import com.google.devtools.j2objc.ast.ArrayAccess;
+import com.google.devtools.j2objc.ast.ArrayCreation;
+import com.google.devtools.j2objc.ast.ArrayInitializer;
+import com.google.devtools.j2objc.ast.ArrayType;
+import com.google.devtools.j2objc.ast.AssertStatement;
+import com.google.devtools.j2objc.ast.Assignment;
+import com.google.devtools.j2objc.ast.Block;
+import com.google.devtools.j2objc.ast.BooleanLiteral;
+import com.google.devtools.j2objc.ast.BreakStatement;
+import com.google.devtools.j2objc.ast.CStringLiteral;
+import com.google.devtools.j2objc.ast.CastExpression;
+import com.google.devtools.j2objc.ast.CatchClause;
+import com.google.devtools.j2objc.ast.CharacterLiteral;
+import com.google.devtools.j2objc.ast.ClassInstanceCreation;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.ConditionalExpression;
+import com.google.devtools.j2objc.ast.ConstructorInvocation;
+import com.google.devtools.j2objc.ast.ContinueStatement;
+import com.google.devtools.j2objc.ast.DoStatement;
+import com.google.devtools.j2objc.ast.EmptyStatement;
+import com.google.devtools.j2objc.ast.EnhancedForStatement;
+import com.google.devtools.j2objc.ast.Expression;
+import com.google.devtools.j2objc.ast.ExpressionStatement;
+import com.google.devtools.j2objc.ast.FieldAccess;
+import com.google.devtools.j2objc.ast.ForStatement;
+import com.google.devtools.j2objc.ast.FunctionInvocation;
+import com.google.devtools.j2objc.ast.IfStatement;
+import com.google.devtools.j2objc.ast.InfixExpression;
+import com.google.devtools.j2objc.ast.Initializer;
+import com.google.devtools.j2objc.ast.InstanceofExpression;
+import com.google.devtools.j2objc.ast.LabeledStatement;
+import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.MethodInvocation;
+import com.google.devtools.j2objc.ast.Name;
+import com.google.devtools.j2objc.ast.NativeStatement;
+import com.google.devtools.j2objc.ast.NullLiteral;
+import com.google.devtools.j2objc.ast.NumberLiteral;
+import com.google.devtools.j2objc.ast.ParenthesizedExpression;
+import com.google.devtools.j2objc.ast.PostfixExpression;
+import com.google.devtools.j2objc.ast.PrefixExpression;
+import com.google.devtools.j2objc.ast.PrimitiveType;
+import com.google.devtools.j2objc.ast.QualifiedName;
+import com.google.devtools.j2objc.ast.QualifiedType;
+import com.google.devtools.j2objc.ast.ReturnStatement;
+import com.google.devtools.j2objc.ast.SimpleName;
+import com.google.devtools.j2objc.ast.SimpleType;
+import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
+import com.google.devtools.j2objc.ast.Statement;
+import com.google.devtools.j2objc.ast.StringLiteral;
+import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
+import com.google.devtools.j2objc.ast.SuperFieldAccess;
+import com.google.devtools.j2objc.ast.SuperMethodInvocation;
+import com.google.devtools.j2objc.ast.SwitchCase;
+import com.google.devtools.j2objc.ast.SwitchStatement;
+import com.google.devtools.j2objc.ast.SynchronizedStatement;
+import com.google.devtools.j2objc.ast.ThisExpression;
+import com.google.devtools.j2objc.ast.ThrowStatement;
+import com.google.devtools.j2objc.ast.TreeNode;
+import com.google.devtools.j2objc.ast.TreeUtil;
+import com.google.devtools.j2objc.ast.TreeVisitor;
+import com.google.devtools.j2objc.ast.TryStatement;
+import com.google.devtools.j2objc.ast.Type;
+import com.google.devtools.j2objc.ast.TypeLiteral;
+import com.google.devtools.j2objc.ast.UnionType;
+import com.google.devtools.j2objc.ast.VariableDeclarationExpression;
+import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
+import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
+import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.types.IOSMethod;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
 import com.google.devtools.j2objc.types.IOSTypeBinding;
 import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.ASTNodeException;
-import com.google.devtools.j2objc.util.ASTUtil;
 import com.google.devtools.j2objc.util.BindingUtil;
-import com.google.devtools.j2objc.util.ErrorReportingASTVisitor;
-import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.NameTable;
 import com.google.devtools.j2objc.util.UnicodeUtils;
 
-import org.eclipse.jdt.core.dom.AST;
-import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
-import org.eclipse.jdt.core.dom.ArrayAccess;
-import org.eclipse.jdt.core.dom.ArrayCreation;
-import org.eclipse.jdt.core.dom.ArrayInitializer;
-import org.eclipse.jdt.core.dom.ArrayType;
-import org.eclipse.jdt.core.dom.AssertStatement;
-import org.eclipse.jdt.core.dom.Assignment;
-import org.eclipse.jdt.core.dom.Block;
-import org.eclipse.jdt.core.dom.BooleanLiteral;
-import org.eclipse.jdt.core.dom.BreakStatement;
-import org.eclipse.jdt.core.dom.CastExpression;
-import org.eclipse.jdt.core.dom.CatchClause;
-import org.eclipse.jdt.core.dom.CharacterLiteral;
-import org.eclipse.jdt.core.dom.ClassInstanceCreation;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.ConditionalExpression;
-import org.eclipse.jdt.core.dom.ConstructorInvocation;
-import org.eclipse.jdt.core.dom.ContinueStatement;
-import org.eclipse.jdt.core.dom.DoStatement;
-import org.eclipse.jdt.core.dom.EmptyStatement;
-import org.eclipse.jdt.core.dom.EnhancedForStatement;
-import org.eclipse.jdt.core.dom.Expression;
-import org.eclipse.jdt.core.dom.ExpressionStatement;
-import org.eclipse.jdt.core.dom.FieldAccess;
-import org.eclipse.jdt.core.dom.ForStatement;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.IfStatement;
-import org.eclipse.jdt.core.dom.InfixExpression;
-import org.eclipse.jdt.core.dom.Initializer;
-import org.eclipse.jdt.core.dom.InstanceofExpression;
-import org.eclipse.jdt.core.dom.LabeledStatement;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.MethodInvocation;
-import org.eclipse.jdt.core.dom.Name;
-import org.eclipse.jdt.core.dom.NullLiteral;
-import org.eclipse.jdt.core.dom.NumberLiteral;
-import org.eclipse.jdt.core.dom.ParenthesizedExpression;
-import org.eclipse.jdt.core.dom.PostfixExpression;
-import org.eclipse.jdt.core.dom.PrefixExpression;
-import org.eclipse.jdt.core.dom.PrimitiveType;
-import org.eclipse.jdt.core.dom.QualifiedName;
-import org.eclipse.jdt.core.dom.QualifiedType;
-import org.eclipse.jdt.core.dom.ReturnStatement;
-import org.eclipse.jdt.core.dom.SimpleName;
-import org.eclipse.jdt.core.dom.SimpleType;
-import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
-import org.eclipse.jdt.core.dom.Statement;
-import org.eclipse.jdt.core.dom.StringLiteral;
-import org.eclipse.jdt.core.dom.SuperConstructorInvocation;
-import org.eclipse.jdt.core.dom.SuperFieldAccess;
-import org.eclipse.jdt.core.dom.SuperMethodInvocation;
-import org.eclipse.jdt.core.dom.SwitchCase;
-import org.eclipse.jdt.core.dom.SwitchStatement;
-import org.eclipse.jdt.core.dom.SynchronizedStatement;
-import org.eclipse.jdt.core.dom.ThisExpression;
-import org.eclipse.jdt.core.dom.ThrowStatement;
-import org.eclipse.jdt.core.dom.TryStatement;
-import org.eclipse.jdt.core.dom.Type;
-import org.eclipse.jdt.core.dom.TypeLiteral;
-import org.eclipse.jdt.core.dom.UnionType;
-import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
-import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
-import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
-import org.eclipse.jdt.core.dom.WhileStatement;
 
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -117,25 +112,18 @@ import java.util.regex.Pattern;
  *
  * @author Tom Ball
  */
-public class StatementGenerator extends ErrorReportingASTVisitor {
+public class StatementGenerator extends TreeVisitor {
+
+  private final CompilationUnit unit;
   private final SourceBuilder buffer;
-  private final Set<IVariableBinding> fieldHiders;
   private final boolean asFunction;
   private final boolean useReferenceCounting;
-  // The boolean value indicates whether the expression should be cast when the
-  // resolved type of the expression is known to be "id".
-  private final Map<Expression, Boolean> needsCastNodes = Maps.newHashMap();
 
-  private static final String EXPONENTIAL_FLOATING_POINT_REGEX =
-      "[+-]?\\d*\\.?\\d*[eE][+-]?\\d+";
-  private static final String FLOATING_POINT_SUFFIX_REGEX = ".*[fFdD]";
-  private static final String HEX_LITERAL_REGEX = "0[xX].*";
   private static final Pattern TRIGRAPH_REGEX = Pattern.compile("@\".*\\?\\?[=/'()!<>-].*\"");
 
-  public static String generate(ASTNode node, Set<IVariableBinding> fieldHiders,
-      boolean asFunction, SourcePosition sourcePosition) throws ASTNodeException {
-    StatementGenerator generator = new StatementGenerator(node, fieldHiders, asFunction,
-        sourcePosition);
+  public static String generate(
+      TreeNode node, boolean asFunction, int currentLine) throws ASTNodeException {
+    StatementGenerator generator = new StatementGenerator(node, asFunction, currentLine);
     if (node == null) {
       throw new NullPointerException("cannot generate a null statement");
     }
@@ -143,33 +131,9 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     return generator.getResult();
   }
 
-  public static String generateArguments(IMethodBinding method, List<Expression> args,
-      Set<IVariableBinding> fieldHiders, SourcePosition sourcePosition) {
-    StatementGenerator generator = new StatementGenerator(null, fieldHiders, false,
-        sourcePosition);
-    if (IOSMethodBinding.hasVarArgsTarget(method)) {
-      generator.printVarArgs(method, args);
-    } else {
-      int nArgs = args.size();
-      for (int i = 0; i < nArgs; i++) {
-        Expression arg = args.get(i);
-        generator.printArgument(method, arg, i);
-        if (i + 1 < nArgs) {
-          generator.buffer.append(' ');
-        }
-      }
-    }
-    return generator.getResult();
-  }
-
-  private StatementGenerator(ASTNode node, Set<IVariableBinding> fieldHiders, boolean asFunction,
-                             SourcePosition sourcePosition) {
-    CompilationUnit unit = null;
-    if (node != null && node.getRoot() instanceof CompilationUnit) {
-      unit = (CompilationUnit) node.getRoot();
-    }
-    buffer = new SourceBuilder(unit, Options.emitLineDirectives(), sourcePosition);
-    this.fieldHiders = fieldHiders;
+  private StatementGenerator(TreeNode node, boolean asFunction, int currentLine) {
+    this.unit = TreeUtil.getCompilationUnit(node);
+    buffer = new SourceBuilder(Options.emitLineDirectives(), currentLine);
     this.asFunction = asFunction;
     useReferenceCounting = !Options.useARC();
   }
@@ -246,10 +210,19 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   }
 
   @Override
+  public boolean preVisit(TreeNode node) {
+    super.preVisit(node);
+    if (!(node instanceof Block)) {
+      buffer.syncLineNumbers(node);
+    }
+    return true;
+  }
+
+  @Override
   public boolean visit(AnonymousClassDeclaration node) {
     // Multi-method anonymous classes should have been converted by the
     // InnerClassExtractor.
-    assert node.bodyDeclarations().size() == 1;
+    assert node.getBodyDeclarations().size() == 1;
 
     // Generate an iOS block.
     assert false : "not implemented yet";
@@ -269,13 +242,13 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(ArrayInitializer node) {
-    ITypeBinding type = Types.getTypeBinding(node);
+    ITypeBinding type = node.getTypeBinding();
     assert type.isArray();
     ITypeBinding componentType = type.getComponentType();
-    String componentTypeName = componentType.isPrimitive() ?
-        NameTable.primitiveTypeToObjC(componentType.getName()) : "id";
+    String componentTypeName = componentType.isPrimitive()
+        ? NameTable.primitiveTypeToObjC(componentType) : "id";
     buffer.append(String.format("(%s[]){ ", componentTypeName));
-    for (Iterator<Expression> it = ASTUtil.getExpressions(node).iterator(); it.hasNext(); ) {
+    for (Iterator<Expression> it = node.getExpressions().iterator(); it.hasNext(); ) {
       it.next().accept(this);
       if (it.hasNext()) {
         buffer.append(", ");
@@ -287,7 +260,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(ArrayType node) {
-    ITypeBinding binding = Types.mapType(Types.getTypeBinding(node));
+    ITypeBinding binding = Types.mapType(node.getTypeBinding());
     if (binding instanceof IOSTypeBinding) {
       buffer.append(binding.getName());
     } else {
@@ -320,15 +293,15 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
         buffer.append(" description]");
       }
     } else {
+      int startPos = node.getStartPosition();
       String assertStatementString =
-          extractNodeCode(buffer.getSourcePosition().getSource(), node);
+          unit.getSource().substring(startPos, startPos + node.getLength());
       assertStatementString = CharMatcher.WHITESPACE.trimFrom(assertStatementString);
       assertStatementString = makeQuotedString(assertStatementString);
       // Generates the following string:
       // filename.java:456 condition failed: foobar != fish.
-      buffer.append("@\"" + buffer.getSourcePosition().getFilename() + ":"
-                  + buffer.getLineNumber(node)
-                  + " condition failed: " + assertStatementString + "\"");
+      buffer.append("@\"" + TreeUtil.getSourceFileName(unit) + ":" + node.getLineNumber()
+          + " condition failed: " + assertStatementString + "\"");
     }
     buffer.append(");\n");
     return false;
@@ -336,98 +309,32 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(Assignment node) {
-    if (Types.hasDeferredFieldSetter(node)) {
-      printDeferredFieldSetter(node);
-      return false;
-    }
     node.getLeftHandSide().accept(this);
     buffer.append(' ');
-    buffer.append(getOperatorStr(node.getOperator()));
+    buffer.append(node.getOperator().toString());
     buffer.append(' ');
     node.getRightHandSide().accept(this);
     return false;
   }
 
-  private void printDeferredFieldSetter(Assignment node) {
-    Expression lhs = node.getLeftHandSide();
-    IVariableBinding var = Types.getVariableBinding(lhs);
-    ITypeBinding declaringType = var.getDeclaringClass().getTypeDeclaration();
-    String setterName = String.format("%s_set_%s", NameTable.getFullName(declaringType),
-        NameTable.javaFieldToObjC(NameTable.getName(var)));
-    buffer.append(setterName);
-    buffer.append('(');
-    if (lhs instanceof QualifiedName) {
-      ((QualifiedName) lhs).getQualifier().accept(this);
-    } else if (lhs instanceof FieldAccess) {
-      ((FieldAccess) lhs).getExpression().accept(this);
-    } else {
-      buffer.append("self");
-    }
-    buffer.append(", ");
-    node.getRightHandSide().accept(this);
-    buffer.append(')');
-  }
-
-  private static String getOperatorStr(Assignment.Operator op) {
-    if (op.equals(Assignment.Operator.RIGHT_SHIFT_UNSIGNED_ASSIGN)) {
-      return ">>=";
-    }
-    return op.toString();
-  }
-
-  private void printUnsignedRightShift(Expression lhs, Expression rhs) {
-    // (type) (((unsigned type) lhs) >> rhs);
-    String type = getRightShiftType(lhs);
-    buffer.append("(");
-    buffer.append(type);
-    buffer.append(") (((unsigned ");
-    buffer.append(type);
-    buffer.append(") ");
-    lhs.accept(this);
-    buffer.append(") >> ");
-    rhs.accept(this);
-    buffer.append(")");
-  }
-
-  private String getRightShiftType(Expression node) {
-    ITypeBinding binding = Types.getTypeBinding(node);
-    assert binding != null;
-    AST ast = node.getAST();
-    if (ast.resolveWellKnownType("int").equals(binding)) {
-      return "int";
-    } else if (ast.resolveWellKnownType("long").equals(binding)) {
-      return "long long";
-    } else if (ast.resolveWellKnownType("byte").equals(binding)) {
-      return "char";
-    } else if (ast.resolveWellKnownType("short").equals(binding)) {
-      return "short";
-    } else if (ast.resolveWellKnownType("char").equals(binding)) {
-      return "unichar";
-    } else {
-      throw new AssertionError("invalid right shift expression type: " + binding.getName());
-    }
-  }
-
   @Override
   public boolean visit(Block node) {
-    if (Types.hasAutoreleasePool(node)) {
+    if (node.hasAutoreleasePool()) {
       buffer.append("{\n@autoreleasepool ");
     }
     buffer.append("{\n");
-    List<?> stmts = node.statements();
+    List<Statement> stmts = node.getStatements();
     // In case it's the body of a dealloc method, we generate the debug statement.
     // If we detect a -[super dealloc] method call, we are in a dealloc method.
     int size = stmts.size();
     if (size > 0) {
-      if (stmts.get(size - 1) instanceof ExpressionStatement) {
-        ASTNode subnode = ((ExpressionStatement) stmts.get(size - 1)).getExpression();
+      Statement lastStatement = stmts.get(size - 1);
+      if (lastStatement instanceof ExpressionStatement) {
+        Expression subnode = ((ExpressionStatement) lastStatement).getExpression();
         if (subnode instanceof SuperMethodInvocation) {
           SuperMethodInvocation invocation = (SuperMethodInvocation) subnode;
-          IMethodBinding binding = Types.getMethodBinding(invocation);
-          String methodName = NameTable.getName(binding);
-          if (Options.memoryDebug() &&
-              ((methodName.equals(DestructorGenerator.FINALIZE_METHOD)) ||
-               (methodName.equals(DestructorGenerator.DEALLOC_METHOD)))) {
+          IMethodBinding binding = invocation.getMethodBinding();
+          if (Options.memoryDebug() && BindingUtil.isDestructor(binding)) {
             buffer.append("JreMemDebugRemove(self);\n");
           }
         }
@@ -435,7 +342,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     }
     printStatements(stmts);
     buffer.append("}\n");
-    if (Types.hasAutoreleasePool(node)) {
+    if (node.hasAutoreleasePool()) {
       buffer.append("}\n");
     }
     return false;
@@ -444,10 +351,10 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   private void printStatements(List<?> statements) {
     for (Iterator<?> it = statements.iterator(); it.hasNext(); ) {
       Statement s = (Statement) it.next();
-      buffer.syncLineNumbers(s);
       s.accept(this);
     }
   }
+
   @Override
   public boolean visit(BooleanLiteral node) {
     buffer.append(node.booleanValue() ? "YES" : "NO");
@@ -468,42 +375,33 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   }
 
   @Override
+  public boolean visit(CStringLiteral node) {
+    buffer.append("\"");
+    buffer.append(node.getLiteralValue());
+    buffer.append("\"");
+    return false;
+  }
+
+  @Override
   public boolean visit(CastExpression node) {
-    ITypeBinding type = Types.getTypeBinding(node.getType());
+    ITypeBinding type = node.getType().getTypeBinding();
     buffer.append("(");
     buffer.append(NameTable.getSpecificObjCType(type));
     buffer.append(") ");
-    if (type.isInterface() && !type.isAnnotation()) {
-      buffer.append("check_protocol_cast(");
-      node.getExpression().accept(this);
-      buffer.append(", @protocol(");
-      buffer.append(NameTable.getFullName(type));
-      buffer.append("))");
-    } else if (type.isClass() || type.isAnnotation()) {
-      buffer.append("check_class_cast(");
-      node.getExpression().accept(this);
-      buffer.append(", [");
-      buffer.append(NameTable.getFullName(type));
-      buffer.append(" class])");
-    } else {
-      // Cast type check not needed for primitive, enum and array types.
-      node.getExpression().accept(this);
-    }
+    node.getExpression().accept(this);
     return false;
   }
 
   private void printMultiCatch(CatchClause node, boolean hasResources) {
     SingleVariableDeclaration exception = node.getException();
-    for (Type exceptionType : ASTUtil.getTypes(((UnionType) exception.getType()))) {
-      buffer.syncLineNumbers(node);
+    for (Type exceptionType : ((UnionType) exception.getType()).getTypes()) {
       buffer.append("@catch (");
       exceptionType.accept(this);
       buffer.append(' ');
       exception.getName().accept(this);
       buffer.append(") {\n");
       printMainExceptionStore(hasResources, node);
-      buffer.syncLineNumbers(node);
-      printStatements(ASTUtil.getStatements(node.getBody()));
+      printStatements(node.getBody().getStatements());
       buffer.append("}\n");
     }
   }
@@ -516,31 +414,17 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(ClassInstanceCreation node) {
-    ITypeBinding type = Types.getTypeBinding(node.getType());
-    boolean castPrinted = maybePrintCastFromId(node);
-    buffer.append(useReferenceCounting ? "[[[" : "[[");
-    ITypeBinding outerType = type.getDeclaringClass();
+    ITypeBinding type = node.getType().getTypeBinding();
+    boolean addAutorelease = useReferenceCounting && !node.hasRetainedResult();
+    buffer.append(addAutorelease ? "[[[" : "[[");
     buffer.append(NameTable.getFullName(type));
     buffer.append(" alloc] init");
-    IMethodBinding method = Types.getMethodBinding(node);
-    List<Expression> arguments = ASTUtil.getArguments(node);
-    if (node.getExpression() != null && type.isMember() && arguments.size() > 0 &&
-        !Types.getTypeBinding(arguments.get(0)).isEqualTo(outerType)) {
-      // This is calling an untranslated "Outer.new Inner()" method,
-      // so update its binding and arguments as if it had been translated.
-      GeneratedMethodBinding newBinding = new GeneratedMethodBinding(method);
-      newBinding.addParameter(0, outerType);
-      method = newBinding;
-      arguments = Lists.newArrayList(arguments);
-      arguments.add(0, node.getExpression());
-    }
+    IMethodBinding method = node.getMethodBinding();
+    List<Expression> arguments = node.getArguments();
     printArguments(method, arguments);
     buffer.append(']');
-    if (useReferenceCounting) {
+    if (addAutorelease) {
       buffer.append(" autorelease]");
-    }
-    if (castPrinted) {
-      buffer.append(")");
     }
     return false;
   }
@@ -548,12 +432,12 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(ConditionalExpression node) {
     boolean castNeeded = false;
-    ITypeBinding thenType = Types.getTypeBinding(node.getThenExpression());
-    ITypeBinding elseType = Types.getTypeBinding(node.getElseExpression());
+    ITypeBinding thenType = node.getThenExpression().getTypeBinding();
+    ITypeBinding elseType = node.getElseExpression().getTypeBinding();
 
-    if (!thenType.equals(elseType) &&
-        !(node.getThenExpression() instanceof NullLiteral) &&
-        !(node.getElseExpression() instanceof NullLiteral)) {
+    if (!thenType.equals(elseType)
+        && !(node.getThenExpression() instanceof NullLiteral)
+        && !(node.getElseExpression() instanceof NullLiteral)) {
       // gcc fails to compile a conditional expression where the two clauses of
       // the expression have different type. So cast any interface type down to
       // "id" to make the compiler happy. Concrete object types all have a
@@ -586,14 +470,11 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(ConstructorInvocation node) {
-    IMethodBinding binding = Types.getMethodBinding(node);
+    IMethodBinding binding = node.getMethodBinding();
     ITypeBinding declaringClass = binding.getDeclaringClass();
-    List<Expression> args = ASTUtil.getArguments(node);
+    List<Expression> args = node.getArguments();
     buffer.append("[self init" + NameTable.getFullName(declaringClass));
     printArguments(binding, args);
-    if (declaringClass.isEnum()) {
-      buffer.append((args.isEmpty() ? "W" : " w") + "ithNSString:__name withInt:__ordinal");
-    }
     buffer.append("]");
     return false;
   }
@@ -641,9 +522,11 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(ExpressionStatement node) {
     Expression expression = node.getExpression();
-    IMethodBinding method = Types.getMethodBinding(expression);
-    ITypeBinding type = Types.getTypeBinding(expression);
-    if (method != null && !type.isPrimitive() && Options.useARC()) {
+    ITypeBinding type = expression.getTypeBinding();
+    if (!type.isPrimitive() && Options.useARC()
+        && (expression instanceof MethodInvocation
+            || expression instanceof SuperMethodInvocation
+            || expression instanceof ClassInstanceCreation)) {
       // Avoid clang warning that the return value is unused.
       buffer.append("(void) ");
     }
@@ -655,9 +538,8 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(FieldAccess node) {
     Expression expr = node.getExpression();
-    needsCastNodes.put(expr, true);
     // self->static_var is invalid Objective-C.
-    if (!(expr instanceof ThisExpression && BindingUtil.isStatic(Types.getVariableBinding(node)))) {
+    if (!(expr instanceof ThisExpression && BindingUtil.isStatic(node.getVariableBinding()))) {
       expr.accept(this);
       buffer.append("->");
     }
@@ -668,7 +550,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(ForStatement node) {
     buffer.append("for (");
-    for (Iterator<Expression> it = ASTUtil.getInitializers(node).iterator(); it.hasNext(); ) {
+    for (Iterator<Expression> it = node.getInitializers().iterator(); it.hasNext(); ) {
       Expression next = it.next();
       next.accept(this);
       if (it.hasNext()) {
@@ -680,7 +562,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
       node.getExpression().accept(this);
     }
     buffer.append("; ");
-    for (Iterator<Expression> it = ASTUtil.getUpdaters(node).iterator(); it.hasNext(); ) {
+    for (Iterator<Expression> it = node.getUpdaters().iterator(); it.hasNext(); ) {
       it.next().accept(this);
       if (it.hasNext()) {
         buffer.append(", ");
@@ -688,6 +570,20 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     }
     buffer.append(") ");
     node.getBody().accept(this);
+    return false;
+  }
+
+  @Override
+  public boolean visit(FunctionInvocation node) {
+    buffer.append(node.getName());
+    buffer.append('(');
+    for (Iterator<Expression> iter = node.getArguments().iterator(); iter.hasNext(); ) {
+      iter.next().accept(this);
+      if (iter.hasNext()) {
+        buffer.append(", ");
+      }
+    }
+    buffer.append(')');
     return false;
   }
 
@@ -709,13 +605,8 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     InfixExpression.Operator op = node.getOperator();
     Expression lhs = node.getLeftOperand();
     Expression rhs = node.getRightOperand();
-    List<Expression> extendedOperands = ASTUtil.getExtendedOperands(node);
-    ITypeBinding type = Types.getTypeBinding(node);
-    ITypeBinding lhsType = Types.getTypeBinding(lhs);
-    if (Types.isJavaStringType(type) &&
-        op.equals(InfixExpression.Operator.PLUS)) {
-      printStringConcatenation(lhs, rhs, extendedOperands);
-    } else if ((op.equals(InfixExpression.Operator.EQUALS)
+    List<Expression> extendedOperands = node.getExtendedOperands();
+    if ((op.equals(InfixExpression.Operator.EQUALS)
         || op.equals(InfixExpression.Operator.NOT_EQUALS))
         && (lhs instanceof StringLiteral || rhs instanceof StringLiteral)) {
       Expression first = lhs;
@@ -730,22 +621,10 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
       buffer.append(" isEqual:");
       second.accept(this);
       buffer.append("]");
-    } else if (op.equals(InfixExpression.Operator.RIGHT_SHIFT_UNSIGNED) &&
-        !lhsType.getName().equals("char")) {
-      printUnsignedRightShift(lhs, rhs);
-    } else if (op.equals(InfixExpression.Operator.LEFT_SHIFT) && lhsType.getName().equals("long")) {
-      // The C compiler incorrectly shifts left when the shift is greater
-      // than 32 with signed longs, so cast the lhs to unsigned, then
-      // cast the result back to signed.
-      buffer.append("(long long) (((uint64_t) ");
-      lhs.accept(this);
-      buffer.append(") << ");
-      rhs.accept(this);
-      buffer.append(')');
     } else {
       lhs.accept(this);
       buffer.append(' ');
-      buffer.append(getOperatorStr(op));
+      buffer.append(op.toString());
       buffer.append(' ');
       rhs.accept(this);
       for (Iterator<Expression> it = extendedOperands.iterator(); it.hasNext(); ) {
@@ -756,138 +635,6 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     return false;
   }
 
-  private static String getOperatorStr(InfixExpression.Operator op) {
-    if (op.equals(InfixExpression.Operator.RIGHT_SHIFT_UNSIGNED)) {
-      return ">>";
-    }
-    return op.toString();
-  }
-
-  /**
-   * Converts a string concatenation expression into a NSString format string and a
-   * list of arguments for it, containing all the non-literal expressions.  If the
-   * expression is all literals, then a string concatenation is printed.  If not,
-   * then a NSString stringWithFormat: message is output.
-   */
-  @SuppressWarnings("fallthrough")
-  private void printStringConcatenation(Expression leftOperand, Expression rightOperand,
-      List<Expression> extendedOperands) {
-    // Copy all operands into a single list.
-    List<Expression> operands = Lists.newArrayList(leftOperand, rightOperand);
-    operands.addAll(extendedOperands);
-    StringBuilder format = new StringBuilder();
-
-    List<Expression> args = Lists.newArrayList();
-    for (Expression operand : operands) {
-      IBinding binding = Types.getBinding(operand);
-      if (binding instanceof IVariableBinding) {
-        IVariableBinding var = (IVariableBinding) binding;
-        var = var.getVariableDeclaration();
-        Object value = var.getConstantValue();
-        if (value instanceof String) {
-          String s = (String) value;
-          if (UnicodeUtils.hasValidCppCharacters(s)) {
-            format.append(s.replace("%", "%%"));
-          } else {
-            ErrorUtil.error(operand,
-                "String constant has Unicode or octal escape sequences that are not valid in " +
-                "Objective-C.\nEither make string non-final, or remove characters.");
-          }
-          continue;
-        } else if (value != null) {
-          format.append(value.toString());
-          continue;
-        } // else fall through to next section.
-      }
-      if (operand instanceof StringLiteral) {
-        String s = ((StringLiteral) operand).getLiteralValue();
-        if (UnicodeUtils.hasValidCppCharacters(s)) {
-          format.append(s.replace("%", "%%"));
-        } else {
-          // Convert to NSString invocation when printing args.
-          format.append("%@");
-          args.add(operand);
-        }
-      } else if (operand instanceof BooleanLiteral) {
-        format.append(String.valueOf(((BooleanLiteral) operand).booleanValue()));
-      } else if (operand instanceof CharacterLiteral) {
-        format.append(((CharacterLiteral) operand).charValue());
-      } else if (operand instanceof NumberLiteral) {
-        format.append(((NumberLiteral) operand).getToken());
-      } else {
-        args.add(operand);
-
-        // Append format specifier.
-        ITypeBinding operandType = Types.getTypeBinding(operand);
-        if (operandType.isPrimitive()) {
-          String type = operandType.getBinaryName();
-          assert type.length() == 1;
-          switch (type.charAt(0)) {
-            case 'B':  // byte
-            case 'I':  // int
-            case 'S':  // short
-              format.append("%d");
-              break;
-            case 'J':  // long
-              format.append("%lld");
-              break;
-            case 'D':  // double
-            case 'F':  // float
-              format.append("%f");
-              break;
-            case 'C':  // char
-              format.append("%C");
-              break;
-            case 'Z':  // boolean
-              format.append("%@");
-              break;
-            default:
-              throw new AssertionError("unknown primitive type: " + type);
-          }
-        } else {
-          format.append("%@");
-        }
-      }
-    }
-
-    String formatStr = UnicodeUtils.escapeStringLiteral(format.toString());
-    if (args.isEmpty()) {
-      buffer.append("@\"" + formatStr.replace("%%", "%") + "\""); // unescape % character
-      return;
-    }
-
-    buffer.append("[NSString stringWithFormat:@\"");
-    buffer.append(formatStr);
-    buffer.append("\", ");
-    for (Iterator<Expression> iter = args.iterator(); iter.hasNext(); ) {
-      printStringConcatenationArg(iter.next());
-      if (iter.hasNext()) {
-        buffer.append(", ");
-      }
-    }
-    buffer.append(']');
-  }
-
-  private void printStringConcatenationArg(Expression arg) {
-    if (Types.getTypeBinding(arg).isEqualTo(arg.getAST().resolveWellKnownType("boolean"))) {
-      buffer.append("[JavaLangBoolean toStringWithBoolean:");
-      arg.accept(this);
-      buffer.append(']');
-      return;
-    }
-    if (arg instanceof StringLiteral) {
-      // Strings with all valid C99 characters were previously converted,
-      // so this literal needs to be defined with a char array.
-      buffer.append(buildStringFromChars(((StringLiteral) arg).getLiteralValue()));
-      return;
-    }
-    if (arg instanceof NullLiteral) {
-      buffer.append("@\"null\"");
-      return;
-    }
-    arg.accept(this);
-  }
-
   // Some native objective-c methods are declared to return NSUInteger.
   private boolean returnValueNeedsIntCast(Expression arg) {
     if (arg instanceof MethodInvocation) {
@@ -896,14 +643,14 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
         return false;
       }
       MethodInvocation invocation = (MethodInvocation) arg;
-      IMethodBinding methodBinding = Types.getMethodBinding(invocation);
+      IMethodBinding methodBinding = invocation.getMethodBinding();
       String methodName = methodBinding.getName();
-      if (methodName.equals("hash") &&
-          methodBinding.getReturnType().isEqualTo(arg.getAST().resolveWellKnownType("int"))) {
+      if (methodName.equals("hash")
+          && methodBinding.getReturnType().isEqualTo(Types.resolveJavaType("int"))) {
         return true;
       }
       if (invocation.getExpression() != null) {
-        ITypeBinding callee = Types.mapType(Types.getTypeBinding(invocation.getExpression()));
+        ITypeBinding callee = Types.mapType(invocation.getExpression().getTypeBinding());
         if (callee.getName().equals("NSString") && methodName.equals("length")) {
           return true;
         }
@@ -914,8 +661,8 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(InstanceofExpression node) {
-    ITypeBinding leftBinding = Types.getTypeBinding(node.getLeftOperand());
-    ITypeBinding rightBinding = Types.getTypeBinding(node.getRightOperand());
+    ITypeBinding leftBinding = node.getLeftOperand().getTypeBinding();
+    ITypeBinding rightBinding = node.getRightOperand().getTypeBinding();
 
     buffer.append('[');
     if (leftBinding.isInterface()) {
@@ -947,67 +694,28 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(MethodInvocation node) {
-    IMethodBinding binding = Types.getMethodBinding(node);
+    IMethodBinding binding = node.getMethodBinding();
     String methodName = NameTable.getName(binding);
     assert binding != null;
 
     // Object receiving the message, or null if it's a method in this class.
     Expression receiver = node.getExpression();
-    ITypeBinding receiverType = receiver != null ? Types.getTypeBinding(receiver) :
-        binding.getDeclaringClass();
 
-    if (methodName.equals("isAssignableFrom") &&
-        binding.getDeclaringClass().equals(Types.getIOSClass())) {
+    if (methodName.equals("isAssignableFrom")
+        && binding.getDeclaringClass().equals(Types.getIOSClass())) {
       printIsAssignableFromExpression(node);
     } else {
-      IOSMethod iosMethod = IOSMethodBinding.getIOSMethod(binding);
-      boolean castPrinted = maybePrintCast(node, getActualReturnType(binding, receiverType));
-      if (iosMethod != null && iosMethod.isFunction()) {
-        printFunctionInvocation(iosMethod, ASTUtil.getArguments(node));
-      } else {
-        if (returnValueNeedsIntCast(node)) {
-          buffer.append("((int) ");
-          castPrinted = true;
-        }
-        printMethodInvocation(binding, methodName, receiver, ASTUtil.getArguments(node));
+      boolean castPrinted = false;
+      if (returnValueNeedsIntCast(node)) {
+        buffer.append("((jint) ");
+        castPrinted = true;
       }
+      printMethodInvocation(binding, methodName, receiver, node.getArguments());
       if (castPrinted) {
         buffer.append(')');
       }
     }
     return false;
-  }
-
-  private void printFunctionInvocation(IOSMethod iosMethod, List<Expression> args) {
-    if (iosMethod == IOSMethod.DEREFERENCE) {
-      buffer.append("(*");
-      args.get(0).accept(this);
-      buffer.append(')');
-      return;
-    } else if (iosMethod == IOSMethod.ADDRESS_OF) {
-      buffer.append('&');
-      args.get(0).accept(this);
-      return;
-    }
-    buffer.append(iosMethod.getName());
-    buffer.append('(');
-    boolean isFirst = true;
-    for (Expression arg : args) {
-      if (isFirst) {
-        isFirst = false;
-      } else {
-        buffer.append(", ");
-      }
-      boolean hasNilCheck = Types.hasNilCheck(arg);
-      if (hasNilCheck) {
-        buffer.append("nil_chk(");
-      }
-      arg.accept(this);
-      if (hasNilCheck) {
-        buffer.append(')');
-      }
-    }
-    buffer.append(')');
   }
 
   private void printMethodInvocation(
@@ -1017,21 +725,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     if (BindingUtil.isStatic(binding)) {
       buffer.append(NameTable.getFullName(binding.getDeclaringClass()));
     } else if (receiver != null) {
-      needsCastNodes.put(receiver, true);
-      boolean castPrinted = false;
-      boolean hasNilCheck = Types.hasNilCheck(receiver);
-      if (hasNilCheck) {
-        castPrinted = maybePrintCastFromId(receiver);
-        needsCastNodes.remove(receiver);
-        buffer.append("nil_chk(");
-      }
       receiver.accept(this);
-      if (hasNilCheck) {
-        buffer.append(')');
-        if (castPrinted) {
-          buffer.append(')');
-        }
-      }
     } else {
       buffer.append("self");
     }
@@ -1046,68 +740,14 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     buffer.append(']');
   }
 
-  private static ITypeBinding getActualReturnType(
-      IMethodBinding method, ITypeBinding receiverType) {
-    IMethodBinding actualDeclaration =
-        getFirstDeclaration(getObjCMethodSignature(method), receiverType);
-    if (actualDeclaration == null) {
-      actualDeclaration = method.getMethodDeclaration();
-    }
-    ITypeBinding returnType = actualDeclaration.getReturnType();
-    if (returnType.isTypeVariable()) {
-      return Types.resolveIOSType("id");
-    }
-    return Types.mapType(returnType.getErasure());
-  }
-
-  /**
-   * Finds the declaration for a given method and receiver in the same way that
-   * the ObjC compiler will search for a declaration.
-   */
-  private static IMethodBinding getFirstDeclaration(String methodSig, ITypeBinding type) {
-    if (type == null) {
-      return null;
-    }
-    type = type.getTypeDeclaration();
-    for (IMethodBinding declaredMethod : type.getDeclaredMethods()) {
-      if (methodSig.equals(getObjCMethodSignature(declaredMethod))) {
-        return declaredMethod;
-      }
-    }
-    List<ITypeBinding> supertypes = Lists.newArrayList();
-    supertypes.addAll(Arrays.asList(type.getInterfaces()));
-    supertypes.add(type.isTypeVariable() ? 0 : supertypes.size(), type.getSuperclass());
-    for (ITypeBinding supertype : supertypes) {
-      IMethodBinding result = getFirstDeclaration(methodSig, supertype);
-      if (result != null) {
-        return result;
-      }
-    }
-    return null;
-  }
-
-  private static String getObjCMethodSignature(IMethodBinding method) {
-    StringBuilder sb = new StringBuilder(method.getName());
-    boolean first = true;
-    for (ITypeBinding paramType : method.getParameterTypes()) {
-      String keyword = NameTable.parameterKeyword(paramType);
-      if (first) {
-        first = false;
-        keyword = NameTable.capitalize(keyword);
-      }
-      sb.append(keyword + ":");
-    }
-    return sb.toString();
-  }
-
   /**
    * Class.isAssignableFrom() can test protocols as well as classes, so which
    * case needs to be detected and generated separately.
    */
   private void printIsAssignableFromExpression(MethodInvocation node) {
-    assert !node.arguments().isEmpty();
+    assert !node.getArguments().isEmpty();
     Expression firstExpression = node.getExpression();
-    Expression secondExpression = (Expression) node.arguments().get(0);
+    Expression secondExpression = node.getArguments().get(0);
     buffer.append('[');
     firstExpression.accept(this);
     buffer.append(" isAssignableFrom:");
@@ -1115,32 +755,11 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     buffer.append(']');
   }
 
-  private boolean maybePrintCastFromId(Expression e) {
-    return maybePrintCast(e, Types.resolveIOSType("id"));
-  }
-
-  private boolean maybePrintCast(Expression e, ITypeBinding actualType) {
-    Boolean forceCastOfId = needsCastNodes.get(e);
-    if (forceCastOfId == null) {
-      return false;
-    }
-    ITypeBinding expectedType = Types.mapType(Types.getTypeBinding(e).getTypeDeclaration());
-    if (actualType.isAssignmentCompatible(expectedType)) {
-      return false;
-    }
-    if (actualType == Types.resolveIOSType("id") && !forceCastOfId) {
-      return false;
-    }
-    ITypeBinding type = Types.getTypeBinding(e);
-    if (type == null || type.isPrimitive() || Types.isVoidType(type)) {
-      return false;
-    }
-    String typeName = NameTable.getSpecificObjCType(type);
-    if (typeName.equals(NameTable.ID_TYPE)) {
-      return false;
-    }
-    buffer.append("((" + typeName + ") ");
-    return true;
+  @Override
+  public boolean visit(NativeStatement node) {
+    buffer.append(node.getCode());
+    buffer.append('\n');
+    return false;
   }
 
   @Override
@@ -1152,57 +771,11 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(NumberLiteral node) {
     String token = node.getToken();
-    token = token.replace("_", "");  // Remove any embedded underscores.
-    ITypeBinding binding = Types.getTypeBinding(node);
-    assert binding.isPrimitive();
-    char kind = binding.getKey().charAt(0);  // Primitive types have single-character keys.
-
-    // Convert floating point literals to C format.  No checking is
-    // necessary, since the format was verified by the parser.
-    if (kind == 'D' || kind == 'F') {
-      if (token.matches(FLOATING_POINT_SUFFIX_REGEX)) {
-        token = token.substring(0, token.length() - 1);  // strip suffix
-      }
-      if (token.matches(HEX_LITERAL_REGEX)) {
-        token = Double.toString(Double.parseDouble(token));
-      } else if (!token.matches(EXPONENTIAL_FLOATING_POINT_REGEX)) {
-        if (token.indexOf('.') == -1) {
-          token += ".0";  // C requires a fractional part, except in exponential form.
-        }
-      }
-      if (kind == 'F') {
-        token += 'f';
-      }
-    } else if (kind == 'J') {
-      if (token.equals("0x8000000000000000L") || token.equals("-9223372036854775808L")) {
-        // Convert min long literal to an expression
-        token = "-0x7fffffffffffffffLL - 1";
-      } else {
-        // Convert Java long literals to long long for Obj-C
-        if (token.startsWith("0x")) {
-          buffer.append("(long long) ");  // Ensure constant is treated as signed.
-        }
-        int pos = token.length() - 1;
-        int numLs = 0;
-        while (pos > 0 && token.charAt(pos) == 'L') {
-          numLs++;
-          pos--;
-        }
-
-        if (numLs == 1) {
-          token += 'L';
-        }
-      }
-    } else if (kind == 'I') {
-      if (token.startsWith("0x")) {
-        buffer.append("(int) ");  // Ensure constant is treated as signed.
-      }
-      if (token.equals("0x80000000") || token.equals("-2147483648")) {
-        // Convert min int literal to an expression
-        token = "-0x7fffffff - 1";
-      }
+    if (token != null) {
+      buffer.append(LiteralGenerator.fixNumberToken(token, node.getTypeBinding()));
+    } else {
+      buffer.append(LiteralGenerator.generate(node.getValue()));
     }
-    buffer.append(token);
     return false;
   }
 
@@ -1230,13 +803,13 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(PrimitiveType node) {
-    buffer.append(NameTable.primitiveTypeToObjC(node));
+    buffer.append(NameTable.primitiveTypeToObjC(node.getTypeBinding()));
     return false;
   }
 
   @Override
   public boolean visit(QualifiedName node) {
-    IBinding binding = Types.getBinding(node);
+    IBinding binding = node.getBinding();
     if (binding instanceof IVariableBinding) {
       IVariableBinding var = (IVariableBinding) binding;
       if (BindingUtil.isPrimitiveConstant(var)) {
@@ -1252,7 +825,6 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
       return false;
     }
     Name qualifier = node.getQualifier();
-    needsCastNodes.put(qualifier, true);
     qualifier.accept(this);
     buffer.append("->");
     node.getName().accept(this);
@@ -1261,7 +833,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(QualifiedType node) {
-    ITypeBinding binding = Types.getTypeBinding(node);
+    ITypeBinding binding = node.getTypeBinding();
     if (binding != null) {
       buffer.append(NameTable.getFullName(binding));
       return false;
@@ -1273,25 +845,25 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   public boolean visit(ReturnStatement node) {
     buffer.append("return");
     Expression expr = node.getExpression();
+    MethodDeclaration method = TreeUtil.getOwningMethod(node);
     if (expr != null) {
       buffer.append(' ');
-      MethodDeclaration method = ASTUtil.getOwningMethod(node);
       boolean shouldRetainResult = false;
 
       // In manual reference counting mode, per convention, -copyWithZone: should return
       // an object with a reference count of +1.
-      if (method.getName().getIdentifier().equals("copyWithZone") && useReferenceCounting) {
+      if (method != null && method.getName().getIdentifier().equals("copyWithZone")
+          && useReferenceCounting) {
         shouldRetainResult = true;
       }
       if (shouldRetainResult) {
         buffer.append("[");
       }
-      needsCastNodes.put(expr, false);
       expr.accept(this);
       if (shouldRetainResult) {
         buffer.append(" retain]");
       }
-    } else if (Types.getMethodBinding(ASTUtil.getOwningMethod(node)).isConstructor()) {
+    } else if (method != null && method.getMethodBinding().isConstructor()) {
       // A return statement without any expression is allowed in constructors.
       buffer.append(" self");
     }
@@ -1301,7 +873,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SimpleName node) {
-    IBinding binding = Types.getBinding(node);
+    IBinding binding = node.getBinding();
     if (binding instanceof IVariableBinding) {
       IVariableBinding var = (IVariableBinding) binding;
       if (BindingUtil.isPrimitiveConstant(var)) {
@@ -1309,20 +881,9 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
       } else if (BindingUtil.isStatic(var)) {
         buffer.append(NameTable.getStaticVarQualifiedName(var));
       } else if (var.isField()) {
-        boolean castPrinted = false;
-        if (var.getVariableDeclaration().getType().isTypeVariable()) {
-          castPrinted = maybePrintCastFromId(node);
-        }
         buffer.append(NameTable.javaFieldToObjC(NameTable.getName(var)));
-        if (castPrinted) {
-          buffer.append(')');
-        }
       } else {
-        String name = NameTable.getName(var);
-        buffer.append(name);
-        if (!var.isField() && (fieldHiders.contains(var) || NameTable.isReservedName(name))) {
-          buffer.append("Arg");
-        }
+        buffer.append(NameTable.getName(var));
       }
       return false;
     }
@@ -1340,7 +901,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SimpleType node) {
-    ITypeBinding binding = Types.getTypeBinding(node);
+    ITypeBinding binding = node.getTypeBinding();
     if (binding != null) {
       String name = NameTable.getFullName(binding);
       buffer.append(name);
@@ -1351,7 +912,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SingleVariableDeclaration node) {
-    buffer.append(NameTable.getSpecificObjCType(Types.getVariableBinding(node)));
+    buffer.append(NameTable.getSpecificObjCType(node.getVariableBinding()));
     if (node.isVarargs()) {
       buffer.append("...");
     }
@@ -1400,7 +961,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     int length = s.length();
     StringBuilder buffer = new StringBuilder();
     buffer.append(
-        "[NSString stringWithCharacters:(unichar[]) { ");
+        "[NSString stringWithCharacters:(jchar[]) { ");
     int i = 0;
     while (i < length) {
       char c = s.charAt(i);
@@ -1420,67 +981,54 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SuperConstructorInvocation node) {
+    IMethodBinding binding = node.getMethodBinding();
     buffer.append("[super init");
-    List<Expression> args = ASTUtil.getArguments(node);
-    printArguments(Types.getMethodBinding(node), args);
-    if (Types.getTypeBinding(node).isEnum()
-        || Types.getTypeBinding(ASTUtil.getOwningType(node)).isEnum()) {
-      buffer.append((args.isEmpty() ? "W" : " w") + "ithNSString:__name withInt:__ordinal");
-    }
+    List<Expression> args = node.getArguments();
+    printArguments(binding, args);
     buffer.append(']');
     return false;
   }
 
   @Override
   public boolean visit(SuperFieldAccess node) {
-    buffer.append(NameTable.javaFieldToObjC(NameTable.getName(node.getName())));
+    buffer.append(NameTable.javaFieldToObjC(NameTable.getName(node.getName().getBinding())));
     return false;
   }
 
   @Override
   public boolean visit(SuperMethodInvocation node) {
-    IMethodBinding binding = Types.getMethodBinding(node);
+    IMethodBinding binding = node.getMethodBinding();
     Name qualifier = node.getQualifier();
     if (qualifier != null) {
-      String typeName = NameTable.getFullName(Types.getTypeBinding(qualifier).getSuperclass());
+      String typeName = NameTable.getFullName(
+          BindingUtil.toTypeBinding(qualifier.getBinding()).getSuperclass());
       String selectorName = NameTable.getMethodSelector(binding);
       ITypeBinding returnType = binding.getReturnType();
-      boolean castPrinted = false;
       String closeImpCast = "";
       if (returnType.isPrimitive()) {
         // We must cast the IMP to have the correct return type.
         buffer.append(String.format("((%s (*)(id, SEL, ...))",
-            NameTable.primitiveTypeToObjC(returnType.getName())));
+            NameTable.primitiveTypeToObjC(returnType)));
         closeImpCast = ")";
-      } else {
-        castPrinted = maybePrintCastFromId(node);
       }
       buffer.append(String.format(
           "[%s instanceMethodForSelector:@selector(%s)]%s(", typeName, selectorName, closeImpCast));
       qualifier.accept(this);
       buffer.append(String.format(", @selector(%s)", selectorName));
-      for (Expression arg : ASTUtil.getArguments(node)) {
+      for (Expression arg : node.getArguments()) {
         buffer.append(", ");
         arg.accept(this);
       }
       buffer.append(")");
-      if (castPrinted) {
-        buffer.append(")");
-      }
     } else {
-      boolean castPrinted = maybePrintCast(node, getActualReturnType(binding,
-          Types.getTypeBinding(ASTUtil.getOwningType(node)).getSuperclass()));
       if (BindingUtil.isStatic(binding)) {
         buffer.append("[[super class] ");
       } else {
         buffer.append("[super ");
       }
       buffer.append(NameTable.getName(binding));
-      printArguments(binding, ASTUtil.getArguments(node));
+      printArguments(binding, node.getArguments());
       buffer.append(']');
-      if (castPrinted) {
-        buffer.append(')');
-      }
     }
     return false;
   }
@@ -1492,11 +1040,11 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     } else {
       buffer.append("  case ");
       Expression expr = node.getExpression();
-      boolean isEnumConstant = Types.getTypeBinding(expr).isEnum();
+      boolean isEnumConstant = expr.getTypeBinding().isEnum();
       if (isEnumConstant) {
-        String typeName = NameTable.getFullName(Types.getTypeBinding(expr));
-        String bareTypeName = typeName.endsWith("Enum") ?
-            typeName.substring(0, typeName.length() - 4) : typeName;
+        String typeName = NameTable.getFullName(expr.getTypeBinding());
+        String bareTypeName = typeName.endsWith("Enum")
+            ? typeName.substring(0, typeName.length() - 4) : typeName;
         buffer.append(bareTypeName).append("_");
       }
       if (isEnumConstant && expr instanceof SimpleName) {
@@ -1514,7 +1062,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(SwitchStatement node) {
     Expression expr = node.getExpression();
-    ITypeBinding exprType = Types.getTypeBinding(expr);
+    ITypeBinding exprType = expr.getTypeBinding();
     if (Types.isJavaStringType(exprType)) {
       printStringSwitchStatement(node);
       return false;
@@ -1529,9 +1077,8 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     }
     buffer.append(") ");
     buffer.append("{\n");
-    List<Statement> stmts = ASTUtil.getStatements(node);
+    List<Statement> stmts = node.getStatements();
     for (Statement stmt : stmts) {
-      buffer.syncLineNumbers(stmt);
       stmt.accept(this);
     }
     if (!stmts.isEmpty() && stmts.get(stmts.size() - 1) instanceof SwitchCase) {
@@ -1548,36 +1095,32 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
     // Define an array of all the string constant case values.
     List<String> caseValues = Lists.newArrayList();
-    List<Statement> stmts = ASTUtil.getStatements(node);
+    List<Statement> stmts = node.getStatements();
     for (Statement stmt : stmts) {
       if (stmt instanceof SwitchCase) {
         SwitchCase caseStmt = (SwitchCase) stmt;
         if (!caseStmt.isDefault()) {
           assert (caseStmt.getExpression() instanceof StringLiteral);
-          caseValues.add(((StringLiteral) caseStmt.getExpression()).getEscapedValue());
+          caseValues.add(((StringLiteral) caseStmt.getExpression()).getLiteralValue());
         }
       }
     }
-    buffer.syncLineNumbers(node);
     buffer.append("NSArray *__caseValues = [NSArray arrayWithObjects:");
     for (String value : caseValues) {
-      buffer.append("@" + value + ", ");
+      buffer.append("@\"" + UnicodeUtils.escapeStringLiteral(value) + "\", ");
     }
     buffer.append("nil];\n");
-    buffer.syncLineNumbers(node);
     buffer.append("NSUInteger __index = [__caseValues indexOfObject:");
     node.getExpression().accept(this);
     buffer.append("];\n");
-    buffer.syncLineNumbers(node);
     buffer.append("switch (__index) {\n");
     for (Statement stmt : stmts) {
-      buffer.syncLineNumbers(stmt);
       if (stmt instanceof SwitchCase) {
         SwitchCase caseStmt = (SwitchCase) stmt;
         if (caseStmt.isDefault()) {
           stmt.accept(this);
         } else {
-          int i = caseValues.indexOf(((StringLiteral) caseStmt.getExpression()).getEscapedValue());
+          int i = caseValues.indexOf(((StringLiteral) caseStmt.getExpression()).getLiteralValue());
           assert i >= 0;
           buffer.append("case ");
           buffer.append(i);
@@ -1592,7 +1135,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SynchronizedStatement node) {
-    buffer.append("@synchronized (");
+    buffer.append("@synchronized(");
     node.getExpression().accept(this);
     buffer.append(") ");
     node.getBody().accept(this);
@@ -1615,57 +1158,47 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(TryStatement node) {
-    List<VariableDeclarationExpression> resources = ASTUtil.getResources(node);
+    List<VariableDeclarationExpression> resources = node.getResources();
     boolean hasResources = !resources.isEmpty();
     if (hasResources) {
       buffer.append("{\n");
-      buffer.syncLineNumbers(node);
       buffer.append("JavaLangThrowable *__mainException = nil;\n");
     }
     for (VariableDeclarationExpression var : resources) {
-      buffer.syncLineNumbers(var);
       var.accept(this);
       buffer.append(";\n");
     }
     buffer.append("@try ");
     node.getBody().accept(this);
     buffer.append(' ');
-    for (Iterator<?> it = node.catchClauses().iterator(); it.hasNext(); ) {
-      CatchClause cc = (CatchClause) it.next();
-      if (cc.getException().getType().isUnionType()) {
+    for (CatchClause cc : node.getCatchClauses()) {
+      if (cc.getException().getType() instanceof UnionType) {
         printMultiCatch(cc, hasResources);
       }
-      buffer.syncLineNumbers(cc);
       buffer.append("@catch (");
       cc.getException().accept(this);
       buffer.append(") {\n");
       printMainExceptionStore(hasResources, cc);
-      buffer.syncLineNumbers(cc);
-      printStatements(ASTUtil.getStatements(cc.getBody()));
+      printStatements(cc.getBody().getStatements());
       buffer.append("}\n");
     }
     if (node.getFinally() != null || resources.size() > 0) {
       buffer.append(" @finally {\n");
       if (node.getFinally() != null) {
-        printStatements(ASTUtil.getStatements(node.getFinally()));
+        printStatements(node.getFinally().getStatements());
       }
       for (VariableDeclarationExpression var : resources) {
-        for (VariableDeclarationFragment frag : ASTUtil.getFragments(var)) {
-          buffer.syncLineNumbers(var);
+        for (VariableDeclarationFragment frag : var.getFragments()) {
           buffer.append("@try {\n[");
           buffer.append(frag.getName().getFullyQualifiedName());
           buffer.append(" close];\n}\n");
           buffer.append("@catch (JavaLangThrowable *e) {\n");
-          buffer.syncLineNumbers(var);
           buffer.append("if (__mainException) {\n");
-          buffer.syncLineNumbers(var);
           buffer.append("[__mainException addSuppressedWithJavaLangThrowable:e];\n} else {\n");
-          buffer.syncLineNumbers(var);
           buffer.append("__mainException = e;\n}\n");
           buffer.append("}\n");
         }
       }
-      buffer.syncLineNumbers(node);
       if (hasResources) {
         buffer.append("if (__mainException) {\n@throw __mainException;\n}\n");
       }
@@ -1687,7 +1220,7 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(TypeLiteral node) {
-    ITypeBinding type = Types.getTypeBinding(node.getType());
+    ITypeBinding type = node.getType().getTypeBinding();
     if (type.isPrimitive()) {
       buffer.append(String.format("[IOSClass %sClass]", type.getName()));
     } else if (type.isInterface()) {
@@ -1704,14 +1237,15 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(VariableDeclarationExpression node) {
-    String typeString = NameTable.getSpecificObjCType(Types.getTypeBinding(node));
+    String typeString = NameTable.getSpecificObjCType(node.getTypeBinding());
     boolean needsAsterisk = typeString.endsWith("*");
     buffer.append(typeString);
     if (!needsAsterisk) {
       buffer.append(' ');
     }
-    for (Iterator<?> it = node.fragments().iterator(); it.hasNext(); ) {
-      VariableDeclarationFragment f = (VariableDeclarationFragment) it.next();
+    for (Iterator<VariableDeclarationFragment> it = node.getFragments().iterator();
+         it.hasNext(); ) {
+      VariableDeclarationFragment f = it.next();
       f.accept(this);
       if (it.hasNext()) {
         buffer.append(", ");
@@ -1729,7 +1263,6 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     Expression initializer = node.getInitializer();
     if (initializer != null) {
       buffer.append(" = ");
-      needsCastNodes.put(initializer, false);
       initializer.accept(this);
     }
     return false;
@@ -1737,9 +1270,9 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(VariableDeclarationStatement node) {
-    List<VariableDeclarationFragment> vars = ASTUtil.getFragments(node);
+    List<VariableDeclarationFragment> vars = node.getFragments();
     assert !vars.isEmpty();
-    IVariableBinding binding = Types.getVariableBinding(vars.get(0));
+    IVariableBinding binding = vars.get(0).getVariableBinding();
     String objcType = NameTable.getSpecificObjCType(binding);
     String objcTypePointers = " ";
     int idx = objcType.indexOf(" *");
@@ -1776,16 +1309,6 @@ public class StatementGenerator extends ErrorReportingASTVisitor {
     // All Initializer nodes should have been converted during initialization
     // normalization.
     throw new AssertionError("initializer node not converted");
-  }
-
-  // Returns a string of the source at the location given by offset of the given length.
-  private static String extractCode(String source, int offset, int length) {
-    return source.substring(offset, offset + length);
-  }
-
-  // Returns a string of the code referenced by the given node.
-  private static String extractNodeCode(String source, ASTNode node) {
-    return extractCode(source, node.getStartPosition(), node.getLength());
   }
 
   // Returns a string where all characters that will interfer in

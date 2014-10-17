@@ -357,12 +357,12 @@ public abstract class AbstractCollection<E> implements Collection<E> {
         @throw exception;
         return nil;
       }
-      if ([contents count] < [self size]) {
+      if (contents->size_ < [self size]) {
         contents =
             [IOSObjectArray arrayWithLength:[self size]
                                        type:[[contents getClass] getComponentType]];
       }
-      NSUInteger i = 0;
+      jint i = 0;
       id<JavaUtilIterator> it = [self iterator];
       while ([it hasNext]) {
         IOSObjectArray_Set(contents, i++, [it next]);

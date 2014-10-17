@@ -18,14 +18,10 @@ package com.google.devtools.j2objc.gen;
 
 import com.google.common.io.Files;
 import com.google.devtools.j2objc.Options;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.PackageDeclaration;
+import com.google.devtools.j2objc.ast.TreeNode;
 import com.google.devtools.j2objc.util.ErrorUtil;
-import com.google.devtools.j2objc.util.NameTable;
-
-import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.Modifier;
-import org.eclipse.jdt.core.dom.PackageDeclaration;
 
 import java.io.File;
 import java.io.IOException;
@@ -40,13 +36,9 @@ public abstract class SourceFileGenerator {
   private final SourceBuilder builder;
   private final CompilationUnit unit;
   private final File outputDirectory;
-  private final String sourceFileName;
-  private final String source;
 
-  public SourceFileGenerator(String sourceFileName, String source, CompilationUnit unit, boolean emitLineDirectives) {
-    builder = new SourceBuilder(unit, sourceFileName, source, emitLineDirectives);
-    this.sourceFileName = sourceFileName;
-    this.source = source;
+  public SourceFileGenerator(CompilationUnit unit, boolean emitLineDirectives) {
+    builder = new SourceBuilder(emitLineDirectives);
     this.unit = unit;
     this.outputDirectory = Options.getOutputDirectory();
   }
@@ -60,13 +52,12 @@ public abstract class SourceFileGenerator {
    * Note: class names are still camel-cased to avoid name collisions.
    */
   protected String getOutputFileName(CompilationUnit node) {
-    String javaName = NameTable.getMainJavaName(node, sourceFileName);
     PackageDeclaration pkg = node.getPackage();
-    if (Options.usePackageDirectories() || pkg == null) {
-      return javaName.replace('.', '/') + getSuffix();
+    if (!pkg.isDefaultPackage() && Options.usePackageDirectories()) {
+      return pkg.getName().getFullyQualifiedName().replace('.', File.separatorChar)
+          + File.separatorChar + node.getMainTypeName() + getSuffix();
     } else {
-      String pkgName = pkg.getName().getFullyQualifiedName();
-      return javaName.substring(pkgName.length() + 1) + getSuffix();
+      return node.getMainTypeName() + getSuffix();
     }
   }
 
@@ -74,63 +65,6 @@ public abstract class SourceFileGenerator {
    * Returns the suffix for files created by this generator.
    */
   protected abstract String getSuffix();
-
-  /**
-   * Returns true if a native method has an OCNI block.
-   */
-  protected boolean hasNativeCode(MethodDeclaration m) {
-    return hasNativeCode(m, false);
-  }
-
-  /**
-   * Returns true if a native method has an OCNI block, warning if JSNI
-   * delimiters are found instead.
-   */
-  protected boolean hasNativeCode(MethodDeclaration m, boolean reportJsniWarnings) {
-    assert (m.getModifiers() & Modifier.NATIVE) > 0;
-    String nativeCode = extractNativeCode(m.getStartPosition(), m.getLength(), reportJsniWarnings);
-    return nativeCode != null;
-  }
-
-  /**
-   * Returns text from within a source code range, where that text is
-   * surrounded by OCNI-like tokens ("/&#42;-[" and "]-&#42;/").
-   */
-  protected String extractNativeCode(int offset, int length) {
-    return extractNativeCode(offset, length, true);
-  }
-
-  /**
-   * Returns text from within a source code range, where that text is
-   * surrounded by OCNI-like tokens ("/&#42;-[" and "]-&#42;/"), warning
-   * if JSNI delimiters are found instead.
-   *
-   * @param offset the offset into the source to begin searching for
-   *     a JSNI region
-   * @param length the length of the text range to search
-   * @param reportWarnings if true, warn that JSNI delimiters were found
-   * @return the extracted text between the OCNI delimiters, or null if
-   *     a pair of JSNI delimiters aren't in the specified text range
-   */
-  protected String extractNativeCode(int offset, int length, boolean reportWarnings) {
-    String text = source.substring(offset, offset + length);
-    int start = text.indexOf("/*-[");  // start after the bracket
-    int end = text.lastIndexOf("]-*/");
-
-    if (start == -1 || end <= start) {
-      if (reportWarnings && Options.jsniWarnings()) {
-        start = text.indexOf("/*-{");
-        end = text.lastIndexOf("}-*/");
-        if (start != -1 && end > start) {
-          String message = String.format("JSNI comment found: %s:%d",
-              sourceFileName, builder.getLineNumber(offset));
-          ErrorUtil.warning(message);
-        }
-      }
-      return null;
-    }
-    return text.substring(start + 4, end);
-  }
 
   protected void save(String path) {
     try {
@@ -196,7 +130,7 @@ public abstract class SourceFileGenerator {
     builder.reset();
   }
 
-  protected void syncLineNumbers(ASTNode node) {
+  protected void syncLineNumbers(TreeNode node) {
     builder.syncLineNumbers(node);
   }
 
@@ -214,9 +148,5 @@ public abstract class SourceFileGenerator {
 
   protected SourceBuilder getBuilder() {
     return builder;
-  }
-
-  protected String getSourceFileName() {
-    return sourceFileName;
   }
 }

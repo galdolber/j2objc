@@ -119,7 +119,7 @@ __attribute__ ((unused)) static inline id check_protocol_cast(id __unsafe_unreta
 
 // Should only be used with manual reference counting.
 #if !__has_feature(objc_arc)
-static inline id JreOperatorRetainedAssign(id *pIvar, id self, id value) {
+static inline id JreStrongAssignInner(id *pIvar, id self, id value) {
   // We need a lock here because during
   // JreMemDebugGenerateAllocationsReport(), we want the list of links
   // of the graph to be consistent.
@@ -128,10 +128,10 @@ static inline id JreOperatorRetainedAssign(id *pIvar, id self, id value) {
     JreMemDebugLock();
   }
 #endif // JREMEMDEBUG_ENABLED
-  if (* pIvar != self) {
-    [* pIvar autorelease];
+  if (*pIvar != self) {
+    [*pIvar autorelease];
   }
-  * pIvar = value != self ? [value retain] : self;
+  *pIvar = value;
 #if JREMEMDEBUG_ENABLED
   if (JreMemDebugEnabled) {
     JreMemDebugUnlock();
@@ -140,21 +140,41 @@ static inline id JreOperatorRetainedAssign(id *pIvar, id self, id value) {
 
   return value;
 }
+
+static inline id JreStrongAssign(id *pIvar, id self, id value) {
+  if (value != self) {
+    [value retain];
+  }
+  return JreStrongAssignInner(pIvar, self, value);
+}
+
+static inline id JreStrongAssignAndConsume(id *pIvar, id self, id value) {
+  if (value == self) {
+    [value autorelease];
+  }
+  return JreStrongAssignInner(pIvar, self, value);
+}
 #endif
 
 // Converts main() arguments into an IOSObjectArray of NSStrings.
 FOUNDATION_EXPORT
     IOSObjectArray *JreEmulationMainArguments(int argc, const char *argv[]);
 
+FOUNDATION_EXPORT NSString *JreStrcat(const char *types, ...);
+
 #if __has_feature(objc_arc)
 #define J2OBJC_FIELD_SETTER(CLASS, FIELD, TYPE) \
-  static inline TYPE CLASS##_set_##FIELD(CLASS *instance, TYPE value) { \
+  __attribute__((unused)) static inline TYPE CLASS##_set_##FIELD(CLASS *instance, TYPE value) { \
     return instance->FIELD = value; \
   }
 #else
 #define J2OBJC_FIELD_SETTER(CLASS, FIELD, TYPE) \
-  static inline TYPE CLASS##_set_##FIELD(CLASS *instance, TYPE value) { \
-    return JreOperatorRetainedAssign(&instance->FIELD, instance, value); \
+  __attribute__((unused)) static inline TYPE CLASS##_set_##FIELD(CLASS *instance, TYPE value) { \
+    return JreStrongAssign(&instance->FIELD, instance, value); \
+  }\
+  __attribute__((unused)) static inline TYPE CLASS##_setAndConsume_##FIELD( \
+        CLASS *instance, TYPE value) { \
+    return JreStrongAssignAndConsume(&instance->FIELD, instance, value); \
   }
 #endif
 
@@ -171,15 +191,39 @@ MOD_ASSIGN_DEFN(Int, int)
 MOD_ASSIGN_DEFN(Long, long long)
 MOD_ASSIGN_DEFN(Short, short int)
 
-#define UR_SHIFT_ASSIGN_DEFN(NAME, TYPE) \
-  static inline TYPE URShiftAssign##NAME(TYPE *pLhs, int rhs) { \
-    return *pLhs = (TYPE) (((unsigned TYPE) *pLhs) >> rhs); \
+#define SHIFT_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK) \
+  static inline TYPE LShift##NAME(TYPE lhs, jlong rhs) { \
+    return lhs << (rhs & MASK); \
+  } \
+  static inline TYPE RShift##NAME(TYPE lhs, jlong rhs) { \
+    return lhs >> (rhs & MASK); \
+  } \
+  static inline TYPE URShift##NAME(TYPE lhs, jlong rhs) { \
+    return (TYPE) (((UTYPE) lhs) >> (rhs & MASK)); \
   }
 
-UR_SHIFT_ASSIGN_DEFN(Byte, char)
-UR_SHIFT_ASSIGN_DEFN(Int, int)
-UR_SHIFT_ASSIGN_DEFN(Long, long long)
-UR_SHIFT_ASSIGN_DEFN(Short, short int)
+#define SHIFT_ASSIGN_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK) \
+  static inline TYPE LShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
+    return *pLhs = *pLhs << (rhs & MASK); \
+  } \
+  static inline TYPE RShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
+    return *pLhs = *pLhs >> (rhs & MASK); \
+  } \
+  static inline TYPE URShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
+    return *pLhs = (TYPE) (((UTYPE) *pLhs) >> (rhs & MASK)); \
+  }
+
+// Shift masks are determined by the JLS spec, section 15.19.
+SHIFT_OPERATORS_DEFN(32, jint, uint32_t, 0x1f)
+SHIFT_OPERATORS_DEFN(64, jlong, uint64_t, 0x3f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Byte, jbyte, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Char, jchar, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Int, jint, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Long, jlong, uint64_t, 0x3f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Short, jshort, uint32_t, 0x1f)
+
+#undef SHIFT_OPERATORS_DEFN
+#undef SHIFT_ASSIGN_OPERATORS_DEFN
 
 // This macro is used by the translator to add increment and decrement
 // operations to the header files of the boxed types.

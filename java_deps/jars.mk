@@ -27,15 +27,17 @@ ECLIPSE_JARS = \
     org.eclipse.osgi-3.9.1.v20130814-1242.jar \
     org.eclipse.text-3.5.101.jar
 
-GUAVA_JAR = guava-13.0.jar
+GUAVA_JAR = guava-14.0.1.jar
 
 JSR305_JAR = jsr305-2.0.2.jar
 JSR305_SOURCE_JAR = jsr305-2.0.2.jar
 
+JAVAX_INJECT_JAR = javax.inject-1.jar
+JAVAX_INJECT_SOURCE_JAR = javax.inject-1-sources.jar
+
 JUNIT_JAR = junit-4.10.jar
 JUNIT_SOURCE_JAR = junit-4.10-sources.jar
-HAMCREST_SOURCE_JAR = hamcrest-core-1.1.jar
-JUNIT_JARS = $(JUNIT_JAR)
+HAMCREST_JAR = hamcrest-core-1.1.jar
 
 MOCKITO_JAR = mockito-core-1.9.5.jar
 MOCKITO_SOURCE_JAR = mockito-core-1.9.5-sources.jar

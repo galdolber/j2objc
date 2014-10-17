@@ -17,23 +17,21 @@ package com.google.devtools.j2objc.gen;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
+import com.google.devtools.j2objc.ast.EnumConstantDeclaration;
+import com.google.devtools.j2objc.ast.EnumDeclaration;
+import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.SimpleName;
+import com.google.devtools.j2objc.ast.TreeUtil;
+import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
 import com.google.devtools.j2objc.types.GeneratedMethodBinding;
-import com.google.devtools.j2objc.types.Types;
-import com.google.devtools.j2objc.util.ASTUtil;
 import com.google.devtools.j2objc.util.BindingUtil;
 import com.google.devtools.j2objc.util.NameTable;
 
-import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.Modifier;
-import org.eclipse.jdt.core.dom.TypeDeclaration;
-import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -53,7 +51,7 @@ public class MetadataGenerator {
   public MetadataGenerator(AbstractTypeDeclaration typeNode) {
     this.builder = new StringBuilder();
     this.typeNode = Preconditions.checkNotNull(typeNode);
-    this.type = Types.getTypeBinding(typeNode);
+    this.type = typeNode.getTypeBinding();
   }
 
   public String getMetadataSource() {
@@ -117,8 +115,8 @@ public class MetadataGenerator {
 
   private void generateMethodsMetadata() {
     List<String> methodMetadata = Lists.newArrayList();
-    for (MethodDeclaration decl : ASTUtil.getMethodDeclarations(typeNode)) {
-      String metadata = getMethodMetadata(Types.getMethodBinding(decl));
+    for (MethodDeclaration decl : TreeUtil.getMethodDeclarations(typeNode)) {
+      String metadata = getMethodMetadata(decl.getMethodBinding());
       if (metadata != null) {
         methodMetadata.add(metadata);
       }
@@ -134,46 +132,50 @@ public class MetadataGenerator {
   }
 
   private void generateFieldsMetadata() {
-    if (typeNode instanceof TypeDeclaration) {
-      TypeDeclaration typeDecl = (TypeDeclaration) typeNode;
-      List<String> fieldMetadata = Lists.newArrayList();
-      String typeName = NameTable.getFullName(type);
-      for (FieldDeclaration field : typeDecl.getFields()) {
-        for (VariableDeclarationFragment f : ASTUtil.getFragments(field)) {
-          IVariableBinding var = Types.getVariableBinding(f);
-          int modifiers = getFieldModifiers(Types.getVariableBinding(f));
-          String javaName = f.getName().getIdentifier();
-          String objcName = NameTable.javaFieldToObjC(NameTable.getName(f.getName()));
-          if (objcName.equals(javaName + '_')) {
-            // Don't print Java name if it matches the default pattern, to conserve space.
-            javaName = null;
-          }
-          String staticRef = "NULL";
-          String constantValue = "";
-          if (BindingUtil.isStatic(var)) {
-            if (BindingUtil.isPrimitiveConstant(var)) {
-              constantValue = String.format(".constantValue.%s = %s",
-                  getRawValueField(var), NameTable.getPrimitiveConstantName(var));
-            } else {
-              staticRef = String.format("&%s_%s", typeName, objcName);
-            }
-          }
-          String metadata = String.format(
-              "    { \"%s\", %s, 0x%x, \"%s\", %s, %s },\n",
-              objcName, cStr(javaName), modifiers, getTypeName(Types.getTypeBinding(f)), staticRef,
-              constantValue);
-          fieldMetadata.add(metadata);
-        }
+    List<String> fieldMetadata = Lists.newArrayList();
+    String typeName = NameTable.getFullName(type);
+    if (typeNode instanceof EnumDeclaration) {
+      for (EnumConstantDeclaration decl : ((EnumDeclaration) typeNode).getEnumConstants()) {
+        fieldMetadata.add(
+            generateFieldMetadata(decl.getVariableBinding(), decl.getName(), typeName));
       }
-      if (fieldMetadata.size() > 0) {
-        builder.append("  static J2ObjcFieldInfo fields[] = {\n");
-        for (String metadata : fieldMetadata) {
-          builder.append(metadata);
-        }
-        builder.append("  };\n");
-      }
-      fieldMetadataCount = fieldMetadata.size();
     }
+    for (VariableDeclarationFragment f : TreeUtil.getAllFields(typeNode)) {
+      fieldMetadata.add(generateFieldMetadata(f.getVariableBinding(), f.getName(), typeName));
+    }
+    if (fieldMetadata.size() > 0) {
+      builder.append("  static J2ObjcFieldInfo fields[] = {\n");
+      for (String metadata : fieldMetadata) {
+        builder.append(metadata);
+      }
+      builder.append("  };\n");
+    }
+    fieldMetadataCount = fieldMetadata.size();
+  }
+
+  private String generateFieldMetadata(IVariableBinding var, SimpleName name, String typeName) {
+    int modifiers = getFieldModifiers(var);
+    String javaName = name.getIdentifier();
+    String objcName = var.isEnumConstant() ? NameTable.getName(var)
+        : NameTable.javaFieldToObjC(NameTable.getName(var));
+    if (objcName.equals(javaName + '_')) {
+      // Don't print Java name if it matches the default pattern, to conserve space.
+      javaName = null;
+    }
+    String staticRef = "NULL";
+    String constantValue = "";
+    if (BindingUtil.isStatic(var)) {
+      if (BindingUtil.isPrimitiveConstant(var)) {
+        constantValue = String.format(".constantValue.%s = %s",
+            getRawValueField(var), NameTable.getPrimitiveConstantName(var));
+      } else {
+        staticRef = String.format("&%s_%s", typeName, objcName);
+      }
+    }
+    return String.format(
+        "    { \"%s\", %s, 0x%x, \"%s\", %s, %s },\n",
+        objcName, cStr(javaName), modifiers, getTypeName(var.getType()), staticRef,
+        constantValue);
   }
 
   private String getRawValueField(IVariableBinding var) {
@@ -259,16 +261,16 @@ public class MetadataGenerator {
   private int getTypeModifiers() {
     int modifiers = type.getModifiers();
     if (type.isInterface()) {
-      modifiers |= 0x200;
+      modifiers |= java.lang.reflect.Modifier.INTERFACE;
     }
     if (type.isSynthetic()) {
-      modifiers |= 0x1000;
+      modifiers |= BindingUtil.ACC_SYNTHETIC;
     }
     if (type.isAnnotation()) {
-      modifiers |= 0x2000;
+      modifiers |= BindingUtil.ACC_ANNOTATION;
     }
     if (type.isEnum()) {
-      modifiers |= 0x4000;
+      modifiers |= BindingUtil.ACC_ENUM;
     }
     if (type.isAnonymous()) {
       modifiers |= 0x8000;
@@ -283,10 +285,10 @@ public class MetadataGenerator {
   private static int getMethodModifiers(IMethodBinding type) {
     int modifiers = type.getModifiers();
     if (type.isVarargs()) {
-      modifiers |= 0x80;
+      modifiers |= BindingUtil.ACC_VARARGS;
     }
     if (type.isSynthetic()) {
-      modifiers |= 0x1000;
+      modifiers |= BindingUtil.ACC_SYNTHETIC;
     }
     return modifiers;
   }
@@ -298,10 +300,10 @@ public class MetadataGenerator {
   private static int getFieldModifiers(IVariableBinding type) {
     int modifiers = type.getModifiers();
     if (type.isSynthetic()) {
-      modifiers |= 0x1000;
+      modifiers |= BindingUtil.ACC_SYNTHETIC;
     }
     if (type.isEnumConstant()) {
-      modifiers |= 0x4000;
+      modifiers |= BindingUtil.ACC_ENUM;
     }
     return modifiers;
   }

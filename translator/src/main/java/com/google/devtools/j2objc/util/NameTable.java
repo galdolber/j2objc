@@ -17,10 +17,11 @@
 package com.google.devtools.j2objc.util;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.devtools.j2objc.Options;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.PackageDeclaration;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
 import com.google.devtools.j2objc.types.IOSMethod;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
@@ -29,21 +30,14 @@ import com.google.devtools.j2objc.types.PointerTypeBinding;
 import com.google.devtools.j2objc.types.Types;
 import com.google.j2objc.annotations.ObjectiveCName;
 
-import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
-import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.IAnnotationBinding;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.IPackageBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.PackageDeclaration;
-import org.eclipse.jdt.core.dom.PrimitiveType;
-import org.eclipse.jdt.core.dom.SimpleName;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 
-import java.io.File;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +55,18 @@ public class NameTable {
 
   public static final String INIT_NAME = "init";
   public static final String CLINIT_NAME = "initialize";
+  public static final String DEALLOC_METHOD = "dealloc";
+  public static final String FINALIZE_METHOD = "finalize";
+
+  // The JDT compiler requires package-info files be named as "package-info",
+  // but that's an illegal type to generate.
+  public static final String PACKAGE_INFO_FILE_NAME = "package-info";
+  public static final String PACKAGE_INFO_MAIN_TYPE = "package_info";
+
+  // The self name in Java is reserved in Objective-C, but functionized methods
+  // actually want the first parameter to be self. This is an internal name,
+  // converted to self during generation.
+  public static final String SELF_NAME = "$$self$$";
 
   public static final String ID_TYPE = "id";
 
@@ -245,7 +251,7 @@ public class NameTable {
   /**
    * Initialize this service using the AST returned by the parser.
    */
-  public static void initialize(CompilationUnit unit) {
+  public static void initialize() {
     instance = new NameTable(Options.getPackagePrefixes());
   }
 
@@ -267,22 +273,11 @@ public class NameTable {
     }
     String name = binding.getName();
     if (binding instanceof IVariableBinding) {
-      IVariableBinding var = (IVariableBinding) binding;
       if (isReservedName(name)) {
         name += "_";
       }
-      if (var.isField()) {
-        // Check if field has the same name as a method.
-        ITypeBinding superclass = ((IVariableBinding) binding).getDeclaringClass();
-        for (IMethodBinding method : superclass.getDeclaredMethods()) {
-          if (method.getName().equals(name)) {
-            name = name + '_';
-            break;
-          }
-        }
-      }
     }
-    return name;
+    return name.equals(SELF_NAME) ? "self" : name;
   }
 
   private static IBinding getBindingDeclaration(IBinding binding) {
@@ -298,22 +293,8 @@ public class NameTable {
     return binding;
   }
 
-  /**
-   * Returns a name for a SimpleName that may have been renamed by a
-   * translation phase.
-   *
-   * @return the new name, or the old name if no renaming exists
-   */
-  public static String getName(SimpleName node) {
-    return getName(Types.getBinding(node));
-  }
-
   public static boolean isRenamed(IBinding binding) {
     return instance.renamings.containsKey(binding);
-  }
-
-  public static boolean isRenamed(SimpleName node) {
-    return isRenamed(Types.getBinding(node));
   }
 
   /**
@@ -327,13 +308,6 @@ public class NameTable {
           oldName.toString(), previousName, oldName, newName));
     }
     instance.renamings.put(oldName, newName);
-  }
-
-  /**
-   * Adds a SimpleName to the renamings map.
-   */
-  public static void rename(SimpleName node, String newName) {
-    rename(Types.getBinding(node), newName);
   }
 
   /**
@@ -355,26 +329,12 @@ public class NameTable {
     return sb.toString();
   }
 
-  /**
-   * Return the Objective-C equivalent name for a Java primitive type.
-   */
-  public static String primitiveTypeToObjC(PrimitiveType type) {
-    PrimitiveType.Code code = type.getPrimitiveTypeCode();
-    return primitiveTypeToObjC(code.toString());
-  }
-
-  private static final ImmutableMap<String, String> PRIMITIVE_TYPE_MAP =
-      ImmutableMap.<String, String>builder()
-      .put("boolean", "BOOL")
-      .put("byte", "char")
-      .put("char", "unichar")
-      .put("short", "short int")
-      .put("long", "long long int")
-      .build();
-
-  public static String primitiveTypeToObjC(String javaName) {
-    String result = PRIMITIVE_TYPE_MAP.get(javaName);
-    return result != null ? result : javaName;
+  public static String primitiveTypeToObjC(ITypeBinding type) {
+    assert type.isPrimitive();
+    if (Types.isVoidType(type)) {
+      return "void";
+    }
+    return "j" + type.getName();
   }
 
   // TODO(kstanger): See whether the logic in this method can be simplified.
@@ -406,6 +366,10 @@ public class NameTable {
 
   private static String getParameterTypeKeyword(ITypeBinding type) {
     if (isIdType(type) || type.isTypeVariable()) {
+      ITypeBinding[] bounds = type.getTypeBounds();
+      if (bounds.length > 0) {
+        return getParameterTypeKeyword(bounds[0]);
+      }
       return ID_TYPE;
     } else if (type.isPrimitive()) {
       return type.getName();
@@ -502,7 +466,7 @@ public class NameTable {
         objCType = ID_TYPE;
       }
     } else if (type.isPrimitive()) {
-      objCType = primitiveTypeToObjC(type.getName());
+      objCType = primitiveTypeToObjC(type);
     } else {
       objCType = constructObjCType(type.getErasure());
     }
@@ -565,10 +529,6 @@ public class NameTable {
    * name plus the inner class name; for example, java.util.ArrayList.ListItr's
    * name is "JavaUtilArrayList_ListItr".
    */
-  public static String getFullName(AbstractTypeDeclaration typeDecl) {
-    return getFullName(Types.getTypeBinding(typeDecl));
-  }
-
   public static String getFullName(ITypeBinding binding) {
     binding = Types.mapType(binding.getErasure());  // Make sure type variables aren't included.
     String suffix = binding.isEnum() ? "Enum" : "";
@@ -605,63 +565,26 @@ public class NameTable {
 
   /**
    * Returns a "Type_method" function name for static methods, such as from
-   * enum types.
+   * enum types. A combination of classname plus modified selector is
+   * guaranteed to be unique within the app.
    */
-  public static String makeFunctionName(AbstractTypeDeclaration cls, MethodDeclaration method) {
-    return makeFunctionName(Types.getTypeBinding(cls), Types.getMethodBinding(method));
-  }
-
-  public static String makeFunctionName(ITypeBinding classBinding, IMethodBinding methodBinding) {
+  public static String makeFunctionName(IMethodBinding methodBinding) {
+    ITypeBinding classBinding = methodBinding.getDeclaringClass();
     String className = getFullName(classBinding);
-    String methodName = methodBinding.getName();
-
-    // If method name is overloaded, get its declaration index. For example if a class has
-    // private foo(int) and foo(long) methods, the function names would be foo1(int) and foo2(long).
-    int index = 0;
-    for (IMethodBinding m : classBinding.getDeclaredMethods()) {
-      if (m.getName().equals(methodName)) {
-        index++;
-        if (m.isEqualTo(methodBinding)) {
-          break;
-        }
-      }
-    }
-
-    return String.format("%s_%s_%s", className, methodName,
-        index > 1 ? Integer.toString(index) : "");
+    String methodName = getMethodSelector(methodBinding).replace(':', '_');
+    return String.format("%s_%s", className, methodName);
   }
 
   public static boolean isReservedName(String name) {
     return reservedNames.contains(name) || nsObjectMessages.contains(name);
   }
 
-  /**
-   * Returns the fully-qualified main class for a given compilation unit.
-   */
-  public static String getMainJavaName(CompilationUnit node, String sourceFileName) {
-    String className = getClassNameFromSourceFileName(sourceFileName);
-    PackageDeclaration pkgDecl = node.getPackage();
-    if (pkgDecl != null) {
-      className = pkgDecl.getName().getFullyQualifiedName()  + '.' + className;
-    }
-    return className;
-  }
-
-  private static String getClassNameFromSourceFileName(String sourceFileName) {
-    int begin = sourceFileName.lastIndexOf(File.separatorChar) + 1;
-    int end = sourceFileName.lastIndexOf(".java");
-    String className = sourceFileName.substring(begin, end);
-    return className;
-  }
-
-  public static String getMainTypeName(CompilationUnit node, String sourceFileName) {
-    String className = getClassNameFromSourceFileName(sourceFileName);
-    PackageDeclaration pkgDecl = node.getPackage();
-    if (pkgDecl != null) {
-      String pkgName = getPrefix(pkgDecl.getName().getFullyQualifiedName());
-      return pkgName + className;
+  public static String getMainTypeFullName(CompilationUnit unit) {
+    PackageDeclaration pkg = unit.getPackage();
+    if (pkg.isDefaultPackage()) {
+      return unit.getMainTypeName();
     } else {
-      return className;
+      return getPrefix(pkg.getName().getFullyQualifiedName()) + unit.getMainTypeName();
     }
   }
 

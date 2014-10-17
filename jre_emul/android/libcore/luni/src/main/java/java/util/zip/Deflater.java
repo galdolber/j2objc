@@ -257,7 +257,7 @@ public class Deflater {
       if (!buf) {
         return -1;
       }
-      if ([buf count] > 0) {
+      if (buf->size_ > 0) {
         zStream->next_out = (Bytef *) [buf byteRefAtIndex:offset];
       }
       zStream->avail_out = byteCount;
@@ -281,8 +281,8 @@ public class Deflater {
           @throw AUTORELEASE([[JavaUtilZipDataFormatException alloc] init]);
       }
 
-      int bytesRead = zStream->next_in - initialNextIn;
-      int bytesWritten = zStream->next_out - initialNextOut;
+      int bytesRead = (int) (zStream->next_in - initialNextIn);
+      int bytesWritten = (int) (zStream->next_out - initialNextOut);
 
       self->inRead_ += bytesRead;
       return bytesWritten;
@@ -310,7 +310,7 @@ public class Deflater {
     private native void endImpl(long handle) /*-[
         z_stream *zStream = (z_stream*) handle;
         deflateEnd(zStream);
-        free((void*) inBuffer_);
+        free((void*) self->inBuffer_);
         free(zStream);
     ]-*/;
 
@@ -361,7 +361,7 @@ public class Deflater {
 
     private native int getAdlerImpl(long handle) /*-[
         z_stream *zStream = (z_stream*) handle;
-        return zStream->adler;
+        return (int) zStream->adler;
     ]-*/;
 
     /**
@@ -497,10 +497,10 @@ public class Deflater {
       if (baseAddr == NULL) {
         @throw AUTORELEASE([[JavaLangOutOfMemoryError alloc] init]);
       }
-      if (inBuffer_ != 0L) {
-        free((void *) inBuffer_);
+      if (self->inBuffer_ != 0L) {
+        free((void *) self->inBuffer_);
       }
-      inBuffer_ = (long long) baseAddr;
+      self->inBuffer_ = (long long) baseAddr;
       zStream->next_in = (Bytef *) baseAddr;
       zStream->avail_in = byteCount;
       if (byteCount > 0) {

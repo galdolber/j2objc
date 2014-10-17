@@ -39,19 +39,19 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
 
   public void testChainedMethod() throws IOException {
     String translation = translateSourceFile(
-        "class Test { void test() { StringBuilder sb = new StringBuilder(); " +
-        "sb.append(\"a\").append(\"b\").append(\"c\").append(\"d\").append(\"e\").append(\"f\")" +
-        ".append(\"f\"); } }", "Test", "Test.m");
-    assertTranslation(translation, "JavaLangStringBuilder *complex$1 = " +
-        "[((JavaLangStringBuilder *) nil_chk([((JavaLangStringBuilder *) " +
-        "nil_chk([sb appendWithNSString:@\"a\"])) " +
-        "appendWithNSString:@\"b\"])) appendWithNSString:@\"c\"];");
-    assertTranslation(translation, "JavaLangStringBuilder *complex$2 = " +
-        "[((JavaLangStringBuilder *) nil_chk([((JavaLangStringBuilder *) " +
-        "nil_chk([((JavaLangStringBuilder *) nil_chk(complex$1)) appendWithNSString:@\"d\"])) " +
-        "appendWithNSString:@\"e\"])) appendWithNSString:@\"f\"];");
-    assertTranslation(translation,
-        "[((JavaLangStringBuilder *) nil_chk(complex$2)) appendWithNSString:@\"f\"];");
+        "class Test { void test() { StringBuilder sb = new StringBuilder(); "
+        + "sb.append(\"a\").append(\"b\").append(\"c\").append(\"d\").append(\"e\").append(\"f\")"
+        + ".append(\"g\"); } }", "Test", "Test.m");
+    assertTranslatedLines(translation,
+        "JavaLangStringBuilder *complex$1 = [((JavaLangStringBuilder *) "
+            + "nil_chk([sb appendWithNSString:@\"a\"])) appendWithNSString:@\"b\"];",
+        "JavaLangStringBuilder *complex$2 = nil_chk([((JavaLangStringBuilder *) "
+            + "nil_chk(complex$1)) appendWithNSString:@\"c\"]);",
+        "JavaLangStringBuilder *complex$3 = [((JavaLangStringBuilder *) "
+            + "nil_chk([complex$2 appendWithNSString:@\"d\"])) appendWithNSString:@\"e\"];",
+        "JavaLangStringBuilder *complex$4 = nil_chk([((JavaLangStringBuilder *) "
+            + "nil_chk(complex$3)) appendWithNSString:@\"f\"]);",
+        "[complex$4 appendWithNSString:@\"g\"];");
   }
 
   public void testLongExpression() throws IOException {
@@ -61,5 +61,33 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
     assertTranslation(translation, "int complex$1 = 1 + 2 - 3 + 4;");
     assertTranslation(translation, "int complex$2 = complex$1 - 5 + 6 - 7;");
     assertTranslation(translation, "return complex$2 + 8 - 9;");
+  }
+
+  public void testAssignCompareExpression() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { boolean b; void test(int i) { if (b = i == 0) {} } }",
+        "Test", "Test.m");
+    assertTranslation(translation, "if ((b_ = (i == 0))) {");
+  }
+
+  public void testIfAssignExpression() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { boolean foo; void test(boolean b) { if (foo = b) {} } }",
+        "Test", "Test.m");
+    assertTranslation(translation, "if ((foo_ = b)) {");
+  }
+
+  public void testWhileAssignExpression() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { boolean foo; void test(boolean b) { while (foo = b) {} } }",
+        "Test", "Test.m");
+    assertTranslation(translation, "while ((foo_ = b)) {");
+  }
+
+  public void testDoAssignExpression() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { boolean foo; void test(boolean b) { do {} while (foo = b); } }",
+        "Test", "Test.m");
+    assertTranslation(translation, "while ((foo_ = b));");
   }
 }

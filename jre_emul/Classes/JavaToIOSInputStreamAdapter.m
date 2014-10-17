@@ -23,7 +23,7 @@
 
 @implementation JavaToIOSInputStreamAdapter
 
-- (id)initWithJavaInputStream:(JavaIoInputStream *)javaStream {
+- (instancetype)initWithJavaInputStream:(JavaIoInputStream *)javaStream {
   if ((self = [super init])) {
     delegate_ = RETAIN_(javaStream);
   }
@@ -43,12 +43,12 @@
 }
 
 - (NSInteger)read:(uint8_t *)buffer maxLength:(NSUInteger)len {
-  IOSByteArray *javaBytes = [IOSByteArray arrayWithLength:len];
-  int result = [delegate_ readWithByteArray:javaBytes withInt:0 withInt:len];
+  IOSByteArray *javaBytes = [IOSByteArray arrayWithLength:(jint)len];
+  int result = [delegate_ readWithByteArray:javaBytes withInt:0 withInt:(int) len];
   if (result == -1) {
     return 0;
   }
-  [javaBytes getBytes:(char *)buffer offset:0 length:result];
+  [javaBytes getBytes:(jbyte *)buffer offset:0 length:result];
   return result;
 }
 

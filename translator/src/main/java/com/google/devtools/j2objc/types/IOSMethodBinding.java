@@ -18,7 +18,6 @@ package com.google.devtools.j2objc.types;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
-import org.eclipse.jdt.core.dom.Modifier;
 
 /**
  * IOSMethodBinding: synthetic binding for an iOS method.
@@ -60,54 +59,6 @@ public class IOSMethodBinding extends GeneratedMethodBinding {
       IOSMethod iosMethod, int modifiers, ITypeBinding returnType, ITypeBinding declaringClass) {
     return new IOSMethodBinding(
         iosMethod, null, modifiers, returnType, null, declaringClass, null, false, true);
-  }
-
-  public static IOSMethodBinding newTypedInvocation(IOSMethodBinding m, ITypeBinding returnType) {
-    IOSMethodBinding binding = new IOSMethodBinding(
-        m.getIOSMethod(), null, m.getModifiers(), returnType, m, m.getDeclaringClass(),
-        null, m.isVarargs(), true);
-    binding.addParameters(m);
-    return binding;
-  }
-
-  public static IOSMethodBinding newFunction(
-      String name, ITypeBinding returnType, ITypeBinding declaringClass,
-      ITypeBinding... paramTypes) {
-    return newFunction(name, Modifier.STATIC, returnType, declaringClass, false, paramTypes);
-  }
-
-  public static IOSMethodBinding newFunction(
-      String name, int modifiers, ITypeBinding returnType, ITypeBinding declaringClass,
-      boolean varargs, ITypeBinding... paramTypes) {
-    IOSMethodBinding binding = new IOSMethodBinding(IOSMethod.newFunction(name, varargs),
-        null, modifiers, returnType, null, declaringClass, null, varargs, true);
-    for (ITypeBinding paramType : paramTypes) {
-      binding.addParameter(paramType);
-    }
-    return binding;
-  }
-
-  public static IOSMethodBinding newFunction(IMethodBinding m, String functionName,
-      ITypeBinding[] paramTypes) {
-    IOSMethodBinding binding = new IOSMethodBinding(
-        IOSMethod.newFunction(functionName, m.isVarargs()), null, m.getModifiers(),
-        m.getReturnType(), null, m.getDeclaringClass(), m.getExceptionTypes(), m.isVarargs(), true);
-    for (ITypeBinding paramType : paramTypes) {
-      binding.addParameter(paramType);
-    }
-    return binding;
-  }
-
-  public static IOSMethodBinding newDereference(ITypeBinding type) {
-    assert type instanceof PointerTypeBinding : "Can't dereference a non-pointer.";
-    return new IOSMethodBinding(
-        IOSMethod.DEREFERENCE, null, 0, ((PointerTypeBinding) type).getPointeeType(), null, null,
-        null, false, true);
-  }
-
-  public static IOSMethodBinding newAddressOf(ITypeBinding type) {
-    return new IOSMethodBinding(
-        IOSMethod.ADDRESS_OF, null, 0, new PointerTypeBinding(type), null, null, null, false, true);
   }
 
   public static IOSMethod getIOSMethod(IMethodBinding binding) {

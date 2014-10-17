@@ -155,7 +155,7 @@ public abstract class TimeZone implements Serializable, Cloneable {
 
     private static native TimeZone getDefaultNativeTimeZone() /*-[
       NSTimeZone *tz = [NSTimeZone defaultTimeZone];
-      NSInteger offsetMillis = [tz secondsFromGMT] * 1000;
+      int offsetMillis = (int) ([tz secondsFromGMT] * 1000);
       JavaUtilTimeZone *result = [[JavaUtilSimpleTimeZone alloc] initWithInt:offsetMillis
                                                                 withNSString:[tz name]];
       return AUTORELEASE(result);
@@ -250,10 +250,43 @@ public abstract class TimeZone implements Serializable, Cloneable {
         nativeLocale = [NSLocale currentLocale];
       }
 
-      return [(NSTimeZone *) nativeTimeZone_ localizedName:zoneStyle locale:nativeLocale];
+      return [(NSTimeZone *) self->nativeTimeZone_ localizedName:zoneStyle locale:nativeLocale];
     ]-*/;
 
-    private void appendNumber(StringBuilder builder, int count, int value) {
+    /**
+     * Returns a string representation of an offset from UTC.
+     *
+     * <p>The format is "[GMT](+|-)HH[:]MM". The output is not localized.
+     *
+     * @param includeGmt true to include "GMT", false to exclude
+     * @param includeMinuteSeparator true to include the separator between hours and minutes, false
+     *     to exclude.
+     * @param offsetMillis the offset from UTC
+     *
+     * @hide used internally by SimpleDateFormat
+     */
+    public static String createGmtOffsetString(boolean includeGmt,
+            boolean includeMinuteSeparator, int offsetMillis) {
+        int offsetMinutes = offsetMillis / 60000;
+        char sign = '+';
+        if (offsetMinutes < 0) {
+            sign = '-';
+            offsetMinutes = -offsetMinutes;
+        }
+        StringBuilder builder = new StringBuilder(9);
+        if (includeGmt) {
+            builder.append("GMT");
+        }
+        builder.append(sign);
+        appendNumber(builder, 2, offsetMinutes / 60);
+        if (includeMinuteSeparator) {
+            builder.append(':');
+        }
+        appendNumber(builder, 2, offsetMinutes % 60);
+        return builder.toString();
+    }
+
+    private static void appendNumber(StringBuilder builder, int count, int value) {
         String string = Integer.toString(value);
         for (int i = 0; i < count - string.length(); i++) {
             builder.append('0');
@@ -330,7 +363,7 @@ public abstract class TimeZone implements Serializable, Cloneable {
      * time.
      */
     public native int getRawOffset() /*-[
-      return (int) [(NSTimeZone *) nativeTimeZone_ secondsFromGMT] * 1000;
+      return (int) [(NSTimeZone *) self->nativeTimeZone_ secondsFromGMT] * 1000;
     ]-*/;
 
     /**
@@ -388,7 +421,7 @@ public abstract class TimeZone implements Serializable, Cloneable {
       if (!tz) {
         return nil;
       }
-      int offset = [tz secondsFromGMT] * 1000; // convert to milliseconds
+      int offset = (int) [tz secondsFromGMT] * 1000; // convert to milliseconds
 
       // Figure out the dates that daylight savings time starts and ends.
       NSDate *toDaylightSaving, *toStandard;
@@ -418,25 +451,25 @@ public abstract class TimeZone implements Serializable, Cloneable {
                                                  fromDate:toStandard];
 
         // Convert each day's date components to milliseconds since midnight.
-        int daylightTime = (([daylight hour] * 60 * 60) +
-                            ([daylight minute] * 60) +
-                             [daylight second]) * 1000;
-        int standardTime = (([standard hour] * 60 * 60) +
-                            ([standard minute] * 60) +
-                             [standard second]) * 1000;
+        int daylightTime = (int) (([daylight hour] * 60 * 60) +
+                                 ([daylight minute] * 60) +
+                                  [daylight second]) * 1000;
+        int standardTime = (int) (([standard hour] * 60 * 60) +
+                                 ([standard minute] * 60) +
+                                  [standard second]) * 1000;
 
         return AUTORELEASE([[JavaUtilSimpleTimeZone alloc]
                             initWithInt:offset
                            withNSString:[tz name]
-                                withInt:[daylight month] - 1
-                                withInt:[daylight day]
+                                withInt:(int) [daylight month] - 1
+                                withInt:(int) [daylight day]
                                 withInt:0
                                 withInt:daylightTime
-                                withInt:[standard month] - 1
-                                withInt:[standard day]
+                                withInt:(int) [standard month] - 1
+                                withInt:(int) [standard day]
                                 withInt:0
                                 withInt:standardTime
-                                withInt:savingsOffset]);
+                                withInt:(int) savingsOffset]);
       } else {
         return AUTORELEASE([[JavaUtilSimpleTimeZone alloc]
                            initWithInt:offset withNSString:[tz name]]);
@@ -501,7 +534,7 @@ public abstract class TimeZone implements Serializable, Cloneable {
      * this time zone.
      */
     public native boolean inDaylightTime(Date time) /*-[
-      return [(NSTimeZone *) nativeTimeZone_ isDaylightSavingTime];
+      return [(NSTimeZone *) self->nativeTimeZone_ isDaylightSavingTime];
     ]-*/;
 
     /**
@@ -563,6 +596,6 @@ public abstract class TimeZone implements Serializable, Cloneable {
      * <p>Most applications should not use this method.
      */
     public native boolean useDaylightTime() /*-[
-      return [(NSTimeZone *) nativeTimeZone_ nextDaylightSavingTimeTransition] != nil;
+      return [(NSTimeZone *) self->nativeTimeZone_ nextDaylightSavingTimeTransition] != nil;
     ]-*/;
 }

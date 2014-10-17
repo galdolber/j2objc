@@ -18,7 +18,6 @@ package com.google.devtools.j2objc;
 
 import com.google.devtools.j2objc.gen.ArrayAccessTest;
 import com.google.devtools.j2objc.gen.ArrayCreationTest;
-import com.google.devtools.j2objc.gen.HiddenFieldDetectorTest;
 import com.google.devtools.j2objc.gen.LineDirectivesTest;
 import com.google.devtools.j2objc.gen.ObjectiveCHeaderGeneratorTest;
 import com.google.devtools.j2objc.gen.ObjectiveCImplementationGeneratorTest;
@@ -26,15 +25,17 @@ import com.google.devtools.j2objc.gen.ObjectiveCSegmentedHeaderGeneratorTest;
 import com.google.devtools.j2objc.gen.ObjectiveCSourceFileGeneratorTest;
 import com.google.devtools.j2objc.gen.PrimitiveArrayTest;
 import com.google.devtools.j2objc.gen.StatementGeneratorTest;
-import com.google.devtools.j2objc.translate.ASTFactoryTest;
 import com.google.devtools.j2objc.translate.AnonymousClassConverterTest;
 import com.google.devtools.j2objc.translate.ArrayRewriterTest;
 import com.google.devtools.j2objc.translate.AutoboxerTest;
+import com.google.devtools.j2objc.translate.CastResolverTest;
 import com.google.devtools.j2objc.translate.ComplexExpressionExtractorTest;
+import com.google.devtools.j2objc.translate.ConstantBranchPrunerTest;
 import com.google.devtools.j2objc.translate.CopyAllFieldsWriterTest;
 import com.google.devtools.j2objc.translate.DeadCodeEliminatorTest;
 import com.google.devtools.j2objc.translate.DestructorGeneratorTest;
 import com.google.devtools.j2objc.translate.EnhancedForRewriterTest;
+import com.google.devtools.j2objc.translate.EnumRewriterTest;
 import com.google.devtools.j2objc.translate.FunctionizerTest;
 import com.google.devtools.j2objc.translate.GwtConverterTest;
 import com.google.devtools.j2objc.translate.InitializationNormalizerTest;
@@ -48,10 +49,10 @@ import com.google.devtools.j2objc.translate.RewriterTest;
 import com.google.devtools.j2objc.translate.StaticVarRewriterTest;
 import com.google.devtools.j2objc.translate.TypeSorterTest;
 import com.google.devtools.j2objc.translate.UnsequencedExpressionRewriterTest;
+import com.google.devtools.j2objc.translate.VariableRenamerTest;
 import com.google.devtools.j2objc.types.BindingMapBuilderTest;
 import com.google.devtools.j2objc.types.HeaderImportCollectorTest;
 import com.google.devtools.j2objc.types.ImplementationImportCollectorTest;
-import com.google.devtools.j2objc.types.ModifiedTypeBindingTest;
 import com.google.devtools.j2objc.types.RenamedTypeBindingTest;
 import com.google.devtools.j2objc.util.BindingUtilTest;
 import com.google.devtools.j2objc.util.DeadCodeMapTest;
@@ -71,7 +72,6 @@ import junit.framework.TestSuite;
 public class SmallTests {
 
   private static final Class<?>[] smallTestClasses = new Class[] {
-    ASTFactoryTest.class,
     AnonymousClassConverterTest.class,
     ArrayAccessTest.class,
     ArrayCreationTest.class,
@@ -79,23 +79,24 @@ public class SmallTests {
     AutoboxerTest.class,
     BindingMapBuilderTest.class,
     BindingUtilTest.class,
+    CastResolverTest.class,
     ComplexExpressionExtractorTest.class,
+    ConstantBranchPrunerTest.class,
     CopyAllFieldsWriterTest.class,
     DeadCodeEliminatorTest.class,
     DeadCodeMapTest.class,
     DestructorGeneratorTest.class,
     EnhancedForRewriterTest.class,
+    EnumRewriterTest.class,
     ErrorReportingASTVisitorTest.class,
     FunctionizerTest.class,
     GwtConverterTest.class,
     HeaderImportCollectorTest.class,
-    HiddenFieldDetectorTest.class,
     ImplementationImportCollectorTest.class,
     InitializationNormalizerTest.class,
     InnerClassExtractorTest.class,
     JavaToIOSMethodTranslatorTest.class,
     LineDirectivesTest.class,
-    ModifiedTypeBindingTest.class,
     NameTableTest.class,
     NilCheckResolverTest.class,
     ObjectiveCHeaderGeneratorTest.class,
@@ -114,7 +115,8 @@ public class SmallTests {
     StaticVarRewriterTest.class,
     TypeSorterTest.class,
     UnicodeUtilsTest.class,
-    UnsequencedExpressionRewriterTest.class
+    UnsequencedExpressionRewriterTest.class,
+    VariableRenamerTest.class
   };
 
   public static Test suite() {

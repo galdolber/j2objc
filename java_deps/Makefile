@@ -14,6 +14,8 @@
 #
 # Author: Keith Stanger
 
+SUFFIXES:
+
 .SECONDARY:
 
 J2OBJC_ROOT = ..
@@ -21,18 +23,20 @@ J2OBJC_ROOT = ..
 include ../make/common.mk
 include jars.mk
 
-DISTRIBUTION_JARS = $(ECLIPSE_JARS) $(GUAVA_JAR) $(JSR305_JAR) $(JUNIT_JAR) $(MOCKITO_JAR)
-INTERNAL_JARS = $(JUNIT_SOURCE_JAR) $(HAMCREST_SOURCE_JAR) $(JSR305_SOURCE_JAR) \
-    $(MOCKITO_SOURCE_JAR)
+DISTRIBUTION_JARS = $(ECLIPSE_JARS) $(GUAVA_JAR) $(JSR305_JAR) $(JAVAX_INJECT_JAR) \
+    $(JUNIT_JAR) $(MOCKITO_JAR)
+INTERNAL_JARS = $(JUNIT_SOURCE_JAR) $(HAMCREST_JAR) $(JSR305_SOURCE_JAR) \
+    $(JAVAX_INJECT_SOURCE_JAR) $(MOCKITO_SOURCE_JAR)
 DIST_JARS = $(DISTRIBUTION_JARS:%=$(DIST_JAR_DIR)/%)
 BUILD_DIR_JARS = $(DISTRIBUTION_JARS:%=$(BUILD_DIR)/%) $(INTERNAL_JARS:%=$(BUILD_DIR)/%)
 
 
 ifndef M2_HOME
-M2_HOME = $(shell echo $$HOME)/.m2
+M2_HOME := $(shell echo $$HOME)/.m2
 endif
 JUNIT_DIR = $(M2_HOME)/repository/junit/junit/4.10
 JSR305_DIR = $(M2_HOME)/repository/com/google/code/findbugs/jsr305/2.0.2
+JAVAX_INJECT_DIR = $(M2_HOME)/repository/javax/inject/javax.inject/1
 HAMCREST_DIR = $(M2_HOME)/repository/org/hamcrest/hamcrest-core/1.1
 MOCKITO_DIR = $(M2_HOME)/repository/org/mockito/mockito-core/1.9.5
 
@@ -46,10 +50,14 @@ $(BUILD_DIR)/.maven_generate: | $(BUILD_DIR)
 $(BUILD_DIR)/$(JUNIT_SOURCE_JAR): $(JUNIT_DIR)/$(JUNIT_SOURCE_JAR) | $(BUILD_DIR)
 	@cp -f $< $@
 
-$(BUILD_DIR)/$(HAMCREST_SOURCE_JAR): $(HAMCREST_DIR)/$(HAMCREST_SOURCE_JAR) | $(BUILD_DIR)
+$(BUILD_DIR)/$(HAMCREST_JAR): $(HAMCREST_DIR)/$(HAMCREST_JAR) | $(BUILD_DIR)
 	@cp -f $< $@
 
 $(BUILD_DIR)/$(JSR305_SOURCE_JAR): $(JSR305_DIR)/$(JSR305_SOURCE_JAR) | $(BUILD_DIR)
+	@cp -f $< $@
+
+$(BUILD_DIR)/$(JAVAX_INJECT_SOURCE_JAR): \
+   $(JAVAX_INJECT_DIR)/$(JAVAX_INJECT_SOURCE_JAR) | $(BUILD_DIR)
 	@cp -f $< $@
 
 $(BUILD_DIR)/$(MOCKITO_SOURCE_JAR): $(MOCKITO_DIR)/$(MOCKITO_SOURCE_JAR) | $(BUILD_DIR)

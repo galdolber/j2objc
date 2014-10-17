@@ -24,6 +24,7 @@ package java.lang;
 #import "java/lang/IllegalArgumentException.h"
 #import "java/lang/NullPointerException.h"
 #include "mach/mach_time.h"
+#include "TargetConditionals.h"
 ]-*/
 
 import java.io.BufferedInputStream;
@@ -39,7 +40,7 @@ import java.util.logging.Logger;
 /**
  * Simple iOS version of java.lang.System.  No code was shared, just its
  * public API.
- * 
+ *
  * @author Tom Ball
  */
 public class System {
@@ -52,7 +53,7 @@ public class System {
   /*-[
     static mach_timebase_info_data_t machTimeInfo_;
   ]-*/
-  
+
   static {
     // Set up standard in, out, and err.
     err = new PrintStream(new FileOutputStream(FileDescriptor.err));
@@ -72,7 +73,7 @@ public class System {
 #if __has_feature(objc_arc)
     JavaLangSystem_in_ = newIn;
 #else
-    JreOperatorRetainedAssign(&JavaLangSystem_in_, self, newIn);
+    JreStrongAssign(&JavaLangSystem_in_, nil, newIn);
 #endif
   ]-*/;
 
@@ -80,7 +81,7 @@ public class System {
 #if __has_feature(objc_arc)
     JavaLangSystem_out_ = newOut;
 #else
-    JreOperatorRetainedAssign(&JavaLangSystem_out_, self, newOut);
+    JreStrongAssign(&JavaLangSystem_out_, nil, newOut);
 #endif
   ]-*/;
 
@@ -88,49 +89,42 @@ public class System {
 #if __has_feature(objc_arc)
     JavaLangSystem_err_ = newErr;
 #else
-    JreOperatorRetainedAssign(&JavaLangSystem_err_, self, newErr);
+    JreStrongAssign(&JavaLangSystem_err_, nil, newErr);
 #endif
   ]-*/;
 
   public static native long currentTimeMillis() /*-[
-    return (long long) ([[NSDate date] timeIntervalSince1970] * 1000);
+    return (long long) ((CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970) * 1000);
   ]-*/;
 
   public static native int identityHashCode(Object anObject) /*-[
     return (int) (intptr_t) anObject;
   ]-*/;
-  
+
   public static native void arraycopy(Object src, int srcPos, Object dest, int destPos,
       int length) /*-[
     if (!src || !dest) {
       @throw AUTORELEASE([[JavaLangNullPointerException alloc] init]);
     }
-    if (![src isKindOfClass:[IOSArray class]]) {
+    Class srcCls = object_getClass(src);
+    Class destCls = object_getClass(dest);
+    if (class_getSuperclass(srcCls) != [IOSArray class]) {
       NSString *msg = [NSString stringWithFormat:@"source of type %@ is not an array",
                        [src class]];
       @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
     }
-    if (![dest isKindOfClass:[IOSArray class]]) {
-      NSString *msg = [NSString stringWithFormat:@"destination of type %@ is not an array",
-                       [dest class]];
-      @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
-    }
-    if (![dest isMemberOfClass:[src class]]) {
+    if (destCls != srcCls) {
       NSString *msg =
          [NSString stringWithFormat:@"source type %@ cannot be copied to array of type %@",
           [src class], [dest class]];
       @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
     }
-    
-    // Check for negative positions and length, since the array classes use unsigned ints.
-    if (srcPos < 0 || destPos < 0 || length < 0) {
-      @throw AUTORELEASE([[JavaLangArrayIndexOutOfBoundsException alloc] init]);
-    }
 
     // Range tests are done by array class.
-    [(IOSArray *) src arraycopy:NSMakeRange(srcPos, length)
+    [(IOSArray *) src arraycopy:srcPos
                     destination:(IOSArray *) dest
-                         offset:destPos];
+                      dstOffset:destPos
+                         length:length];
   ]-*/;
 
   public native static long nanoTime() /*-[
@@ -147,7 +141,6 @@ public class System {
   public static Properties getProperties() {
     if (props == null) {
       props = new Properties();
-      props.setProperty("os.name", "Mac OS X");
       props.setProperty("file.separator", "/");
       props.setProperty("line.separator", "\n");
       props.setProperty("path.separator", ":");
@@ -158,13 +151,26 @@ public class System {
   }
 
   private static native void setSystemProperties(Properties props) /*-[
-    [props setPropertyWithNSString:@"user.home" withNSString:NSHomeDirectory()];
+    NSString *homeDirectory = NSHomeDirectory();
+    [props setPropertyWithNSString:@"user.home" withNSString:homeDirectory];
     [props setPropertyWithNSString:@"user.name" withNSString:NSUserName()];
+
+#if TARGET_OS_IPHONE
+    [props setPropertyWithNSString:@"os.name" withNSString:@"iPhone"];
+    [props setPropertyWithNSString:@"user.dir"
+                      withNSString:[homeDirectory stringByAppendingString:@"/Documents"]];
+#elif TARGET_IPHONE_SIMULATOR
+    [props setPropertyWithNSString:@"os.name" withNSString:@"iPhone Simulator"];
+    [props setPropertyWithNSString:@"user.dir"
+                      withNSString:[homeDirectory stringByAppendingString:@"/Documents"]];
+#else
+    [props setPropertyWithNSString:@"os.name" withNSString:@"Mac OS X"];
     NSString *curDir = [[NSFileManager defaultManager] currentDirectoryPath];
     [props setPropertyWithNSString:@"user.dir" withNSString:curDir];
+#endif
 
     NSString *tmpDir = NSTemporaryDirectory();
-    int iLast = [tmpDir length] - 1;
+    int iLast = (int) [tmpDir length] - 1;
     if (iLast >= 0 && [tmpDir characterAtIndex:iLast] == '/') {
       tmpDir = [tmpDir substringToIndex:iLast];
     }

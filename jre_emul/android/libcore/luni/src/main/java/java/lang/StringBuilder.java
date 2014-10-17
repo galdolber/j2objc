@@ -22,6 +22,14 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
+/*-[
+#import "java/lang/Character.h"
+#import "java/lang/Double.h"
+#import "java/lang/Float.h"
+#import "java/lang/Integer.h"
+#import "java/lang/Long.h"
+]-*/
+
 /**
  * A modifiable {@link CharSequence sequence of characters} for use in creating
  * strings. This class is intended as a direct replacement of
@@ -105,10 +113,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return this builder.
      * @see String#valueOf(boolean)
      */
-    public StringBuilder append(boolean b) {
-        append0(b ? "true" : "false");
-        return this;
-    }
+    public native StringBuilder append(boolean b) /*-[
+      JreStringBuilder_appendString(&self->delegate_, b ? @"true" : @"false");
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified {@code char} value.
@@ -120,10 +128,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return this builder.
      * @see String#valueOf(char)
      */
-    public StringBuilder append(char c) {
-        append0(c);
-        return this;
-    }
+    public native StringBuilder append(char c) /*-[
+      JreStringBuilder_appendChar(&self->delegate_, c);
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified {@code int} value. The
@@ -166,7 +174,7 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @see String#valueOf(float)
      */
     public StringBuilder append(float f) {
-        RealToString.getInstance().appendFloat(this, f);
+        RealToString.appendFloat(this, f);
         return this;
     }
 
@@ -181,7 +189,7 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @see String#valueOf(double)
      */
     public StringBuilder append(double d) {
-        RealToString.getInstance().appendDouble(this, d);
+        RealToString.appendDouble(this, d);
         return this;
     }
 
@@ -195,14 +203,14 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return this builder.
      * @see String#valueOf(Object)
      */
-    public StringBuilder append(Object obj) {
-        if (obj == null) {
-            appendNull();
-        } else {
-            append0(obj.toString());
-        }
-        return this;
-    }
+    public native StringBuilder append(Object obj) /*-[
+      if (obj == nil) {
+        JreStringBuilder_appendNull(&self->delegate_);
+      } else {
+        JreStringBuilder_appendString(&self->delegate_, [obj description]);
+      }
+      return self;
+    ]-*/;
 
     /**
      * Appends the contents of the specified string. If the string is {@code
@@ -212,10 +220,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *            the string to append.
      * @return this builder.
      */
-    public StringBuilder append(String str) {
-        append0(str);
-        return this;
-    }
+    public native StringBuilder append(String str) /*-[
+      JreStringBuilder_appendString(&self->delegate_, str);
+      return self;
+    ]-*/;
 
     /**
      * Appends the contents of the specified {@code StringBuffer}. If the
@@ -226,14 +234,15 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *            the {@code StringBuffer} to append.
      * @return this builder.
      */
-    public StringBuilder append(StringBuffer sb) {
-        if (sb == null) {
-            appendNull();
-        } else {
-            append0(sb.getValue(), 0, sb.length());
-        }
-        return this;
-    }
+    public native StringBuilder append(StringBuffer sb) /*-[
+      if (sb == nil) {
+        JreStringBuilder_appendNull(&self->delegate_);
+      } else {
+        JreStringBuilder_appendBuffer(
+            &self->delegate_, sb->delegate_.buffer_, sb->delegate_.count_);
+      }
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified {@code char[]}.
@@ -245,10 +254,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return this builder.
      * @see String#valueOf(char[])
      */
-    public StringBuilder append(char[] chars) {
-        append0(chars);
-        return this;
-    }
+    public native StringBuilder append(char[] chars) /*-[
+      JreStringBuilder_appendCharArray(&self->delegate_, chars);
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified subset of the {@code
@@ -267,10 +276,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             subsequence.
      * @see String#valueOf(char[],int,int)
      */
-    public StringBuilder append(char[] str, int offset, int len) {
-        append0(str, offset, len);
-        return this;
-    }
+    public native StringBuilder append(char[] str, int offset, int len) /*-[
+      JreStringBuilder_appendCharArraySubset(&self->delegate_, str, offset, len);
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified {@code CharSequence}.
@@ -281,14 +290,14 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *            the {@code CharSequence} to append.
      * @return this builder.
      */
-    public StringBuilder append(CharSequence csq) {
-        if (csq == null) {
-            appendNull();
-        } else {
-            append0(csq, 0, csq.length());
-        }
-        return this;
-    }
+    public native StringBuilder append(CharSequence csq) /*-[
+      if (csq == nil) {
+        JreStringBuilder_appendNull(&self->delegate_);
+      } else {
+        JreStringBuilder_appendCharSequence(&self->delegate_, csq, 0, [csq sequenceLength]);
+      }
+      return self;
+    ]-*/;
 
     /**
      * Appends the string representation of the specified subsequence of the
@@ -307,10 +316,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             is greater than {@code end} or {@code end} is greater than
      *             the length of {@code csq}.
      */
-    public StringBuilder append(CharSequence csq, int start, int end) {
-        append0(csq, start, end);
-        return this;
-    }
+    public native StringBuilder append(CharSequence csq, int start, int end) /*-[
+      JreStringBuilder_appendCharSequence(&self->delegate_, csq, start, end);
+      return self;
+    ]-*/;
 
     /**
      * Appends the encoded Unicode code point. The code point is converted to a
@@ -321,10 +330,11 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return this builder.
      * @see Character#toChars(int)
      */
-    public StringBuilder appendCodePoint(int codePoint) {
-        append0(Character.toChars(codePoint));
-        return this;
-    }
+    public native StringBuilder appendCodePoint(int codePoint) /*-[
+      JreStringBuilder_appendCharArray(
+          &self->delegate_, [JavaLangCharacter toCharsWithInt:codePoint]);
+      return self;
+    ]-*/;
 
     /**
      * Deletes a sequence of characters specified by {@code start} and {@code
@@ -339,10 +349,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             if {@code start} is less than zero, greater than the current
      *             length or greater than {@code end}.
      */
-    public StringBuilder delete(int start, int end) {
-        delete0(start, end);
-        return this;
-    }
+    public native StringBuilder delete(int start, int end) /*-[
+      JreStringBuilder_delete(&self->delegate_, start, end);
+      return self;
+    ]-*/;
 
     /**
      * Deletes the character at the specified index. shifts any remaining
@@ -355,10 +365,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             if {@code index} is less than zero or is greater than or
      *             equal to the current length.
      */
-    public StringBuilder deleteCharAt(int index) {
-        deleteCharAt0(index);
-        return this;
-    }
+    public native StringBuilder deleteCharAt(int index) /*-[
+      JreStringBuilder_deleteCharAt(&self->delegate_, index);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code boolean} value
@@ -376,10 +386,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length}.
      * @see String#valueOf(boolean)
      */
-    public StringBuilder insert(int offset, boolean b) {
-        insert0(offset, b ? "true" : "false");
-        return this;
-    }
+    public native StringBuilder insert(int offset, boolean b) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, b ? @"true" : @"false");
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code char} value at
@@ -396,10 +406,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(char)
      */
-    public StringBuilder insert(int offset, char c) {
-        insert0(offset, c);
-        return this;
-    }
+    public native StringBuilder insert(int offset, char c) /*-[
+      JreStringBuilder_insertChar(&self->delegate_, offset, c);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code int} value at
@@ -416,10 +426,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(int)
      */
-    public StringBuilder insert(int offset, int i) {
-        insert0(offset, Integer.toString(i));
-        return this;
-    }
+    public native StringBuilder insert(int offset, int i) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, [JavaLangInteger toStringWithInt:i]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code long} value at
@@ -436,10 +446,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {code length()}.
      * @see String#valueOf(long)
      */
-    public StringBuilder insert(int offset, long l) {
-        insert0(offset, Long.toString(l));
-        return this;
-    }
+    public native StringBuilder insert(int offset, long l) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, [JavaLangLong toStringWithLong:l]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code float} value at
@@ -456,10 +466,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(float)
      */
-    public StringBuilder insert(int offset, float f) {
-        insert0(offset, Float.toString(f));
-        return this;
-    }
+    public native StringBuilder insert(int offset, float f) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, [JavaLangFloat toStringWithFloat:f]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code double} value
@@ -477,10 +487,11 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(double)
      */
-    public StringBuilder insert(int offset, double d) {
-        insert0(offset, Double.toString(d));
-        return this;
-    }
+    public native StringBuilder insert(int offset, double d) /*-[
+      JreStringBuilder_insertString(
+          &self->delegate_, offset, [JavaLangDouble toStringWithDouble:d]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code Object} at the
@@ -497,10 +508,11 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(Object)
      */
-    public StringBuilder insert(int offset, Object obj) {
-        insert0(offset, obj == null ? "null" : obj.toString());
-        return this;
-    }
+    public native StringBuilder insert(int offset, Object obj) /*-[
+      JreStringBuilder_insertString(
+          &self->delegate_, offset, obj == nil ? @"null" : [obj description]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the specified string at the specified {@code offset}. If the
@@ -515,10 +527,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             if {@code offset} is negative or greater than the current
      *             {@code length()}.
      */
-    public StringBuilder insert(int offset, String str) {
-        insert0(offset, str);
-        return this;
-    }
+    public native StringBuilder insert(int offset, String str) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, str);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code char[]} at the
@@ -535,10 +547,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see String#valueOf(char[])
      */
-    public StringBuilder insert(int offset, char[] ch) {
-        insert0(offset, ch);
-        return this;
-    }
+    public native StringBuilder insert(int offset, char[] ch) /*-[
+      JreStringBuilder_insertCharArray(&self->delegate_, offset, ch);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified subsequence of the
@@ -561,11 +573,11 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             not specify a valid subsequence.
      * @see String#valueOf(char[],int,int)
      */
-    public StringBuilder insert(int offset, char[] str, int strOffset,
-            int strLen) {
-        insert0(offset, str, strOffset, strLen);
-        return this;
-    }
+    public native StringBuilder insert(int offset, char[] str, int strOffset,
+            int strLen) /*-[
+      JreStringBuilder_insertCharArraySubset(&self->delegate_, offset, str, strOffset, strLen);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified {@code CharSequence}
@@ -583,10 +595,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             {@code length()}.
      * @see CharSequence#toString()
      */
-    public StringBuilder insert(int offset, CharSequence s) {
-        insert0(offset, s == null ? "null" : s.toString());
-        return this;
-    }
+    public native StringBuilder insert(int offset, CharSequence s) /*-[
+      JreStringBuilder_insertString(&self->delegate_, offset, s == nil ? @"null" : [s description]);
+      return self;
+    ]-*/;
 
     /**
      * Inserts the string representation of the specified subsequence of the
@@ -611,10 +623,10 @@ public final class StringBuilder extends AbstractStringBuilder implements
      *             specify a valid subsequence.
      * @see CharSequence#subSequence(int, int)
      */
-    public StringBuilder insert(int offset, CharSequence s, int start, int end) {
-        insert0(offset, s, start, end);
-        return this;
-    }
+    public native StringBuilder insert(int offset, CharSequence s, int start, int end) /*-[
+      JreStringBuilder_insertCharSequence(&self->delegate_, offset, s, start, end);
+      return self;
+    ]-*/;
 
     /**
      * Replaces the specified subsequence in this builder with the specified
@@ -633,20 +645,20 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @throws NullPointerException
      *            if {@code str} is {@code null}.
      */
-    public StringBuilder replace(int start, int end, String string) {
-        replace0(start, end, string);
-        return this;
-    }
+    public native StringBuilder replace(int start, int end, String string) /*-[
+      JreStringBuilder_replace(&self->delegate_, start, end, string);
+      return self;
+    ]-*/;
 
     /**
      * Reverses the order of characters in this builder.
      *
      * @return this buffer.
      */
-    public StringBuilder reverse() {
-        reverse0();
-        return this;
-    }
+    public native StringBuilder reverse() /*-[
+      JreStringBuilder_reverse(&self->delegate_);
+      return self;
+    ]-*/;
 
     /**
      * Returns the contents of this builder.
@@ -654,9 +666,9 @@ public final class StringBuilder extends AbstractStringBuilder implements
      * @return the string representation of the data in this builder.
      */
     @Override
-    public String toString() {
-        return super.toString0();
-    }
+    public native String toString() /*-[
+      return JreStringBuilder_toString(&self->delegate_);
+    ]-*/;
 
     @Override
     public int length() {

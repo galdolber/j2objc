@@ -54,7 +54,6 @@ public class Options {
   private static File outputDirectory = new File(".");
   private static boolean usePackageDirectories = true;
   private static String implementationSuffix = ".m";
-  private static boolean printConvertedSources = false;
   private static boolean ignoreMissingImports = false;
   private static MemoryManagementOption memoryManagementOption = null;
   private static boolean emitLineDirectives = false;
@@ -73,6 +72,8 @@ public class Options {
   private static boolean extractUnsequencedModifications = false;
   private static boolean docCommentsEnabled = false;
   private static boolean finalMethodsAsFunctions = false;
+  // TODO(tball): change default to true once clients had a chance to update their builds.
+  private static boolean hidePrivateMembers = false;
   private static int batchTranslateMaximum = 0;
 
   private static File proGuardUsageFile = null;
@@ -199,8 +200,6 @@ public class Options {
         } else {
           usage("unsupported language: " + s);
         }
-      } else if (arg.equals("--print-converted-sources")) {
-        printConvertedSources = true;
       } else if (arg.equals("--ignore-missing-imports")) {
         ignoreMissingImports = true;
       } else if (arg.equals("-use-reference-counting")) {
@@ -261,6 +260,10 @@ public class Options {
             Integer.parseInt(arg.substring(BATCH_PROCESSING_MAX_FLAG.length()));
       } else if (arg.equals("--final-methods-as-functions")) {
         finalMethodsAsFunctions = true;
+      } else if (arg.equals("--hide-private-members")) {
+        hidePrivateMembers = true;
+      } else if (arg.equals("--no-hide-private-members")) {
+        hidePrivateMembers = false;
       } else if (arg.startsWith("-h") || arg.equals("--help")) {
         help(false);
       } else if (arg.startsWith("-")) {
@@ -347,7 +350,7 @@ public class Options {
 
   private static List<String> getPathArgument(String argument) {
     List<String> entries = Lists.newArrayList();
-    for (String entry : Splitter.on(':').split(argument)) {
+    for (String entry : Splitter.on(File.pathSeparatorChar).split(argument)) {
       if (new File(entry).exists()) {  // JDT fails with bad path entries.
         entries.add(entry);
       } else if (entry.startsWith("~/")) {
@@ -364,6 +367,16 @@ public class Options {
 
   public static boolean docCommentsEnabled() {
     return docCommentsEnabled;
+  }
+
+  @VisibleForTesting
+  public static void setDocCommentsEnabled(boolean value) {
+    docCommentsEnabled = value;
+  }
+
+  @VisibleForTesting
+  public static void resetDocComments() {
+    docCommentsEnabled = false;
   }
 
   public static List<String> getSourcePathEntries() {
@@ -422,12 +435,12 @@ public class Options {
     return usePackageDirectories;
   }
 
-  public static String getImplementationFileSuffix() {
-    return implementationSuffix;
+  public static void setPackageDirectories(boolean b) {
+    usePackageDirectories = b;
   }
 
-  public static boolean printConvertedSources() {
-    return printConvertedSources;
+  public static String getImplementationFileSuffix() {
+    return implementationSuffix;
   }
 
   public static boolean ignoreMissingImports() {
@@ -651,4 +664,19 @@ public class Options {
   public static void resetFinalMethodsAsFunctions() {
     finalMethodsAsFunctions = false;
   }
+
+  public static boolean hidePrivateMembers() {
+    return hidePrivateMembers;
+  }
+
+  @VisibleForTesting
+  public static void enableHidePrivateMembers() {
+    hidePrivateMembers = true;
+  }
+
+  @VisibleForTesting
+  public static void resetHidePrivateMembers() {
+    hidePrivateMembers = false;
+  }
+
 }

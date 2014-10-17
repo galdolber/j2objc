@@ -24,18 +24,21 @@
 #import "java/lang/ArrayStoreException.h"
 #import "java/lang/AssertionError.h"
 
-static IOSObjectArray *IOSObjectArray_NewArray(NSUInteger length, IOSClass *type) {
-  IOSObjectArray *array = [IOSObjectArray alloc];
+// Defined in IOSArray.m
+extern id IOSArray_NewArrayWithDimensions(
+    Class self, NSUInteger dimensionCount, const jint *dimensionLengths, IOSClass *type);
+
+static IOSObjectArray *IOSObjectArray_NewArray(jint length, IOSClass *type) {
+  IOSObjectArray *array = NSAllocateObject([IOSObjectArray class], length * sizeof(id), nil);
   array->size_ = length;
   array->elementType_ = type; // All IOSClass types are singleton so don't need to retain.
-  array->buffer_ = calloc(length, sizeof(id));
   return array;
 }
 
 static IOSObjectArray *IOSObjectArray_NewArrayWithObjects(
-    NSUInteger length, IOSClass *type, const id *objects) {
+    jint length, IOSClass *type, const id *objects) {
   IOSObjectArray *array = IOSObjectArray_NewArray(length, type);
-  for (NSUInteger i = 0; i < length; i++) {
+  for (jint i = 0; i < length; i++) {
     array->buffer_[i] = [objects[i] retain];
   }
   return array;
@@ -45,55 +48,53 @@ static IOSObjectArray *IOSObjectArray_NewArrayWithObjects(
 
 @synthesize elementType = elementType_;
 
-+ (id)newArrayWithLength:(NSUInteger)length type:(IOSClass *)type {
-  return IOSObjectArray_NewArray(length, type);
++ (instancetype)newArrayWithLength:(NSUInteger)length type:(IOSClass *)type {
+  return IOSObjectArray_NewArray((jint)length, type);
 }
 
-+ (id)arrayWithLength:(NSUInteger)length type:(IOSClass *)type {
-  return [IOSObjectArray_NewArray(length, type) autorelease];
++ (instancetype)arrayWithLength:(NSUInteger)length type:(IOSClass *)type {
+  return [IOSObjectArray_NewArray((jint)length, type) autorelease];
 }
 
-+ (id)newArrayWithObjects:(const id *)objects
-                    count:(NSUInteger)count
-                     type:(IOSClass *)type {
-  return IOSObjectArray_NewArrayWithObjects(count, type, objects);
++ (instancetype)newArrayWithObjects:(const id *)objects
+                              count:(NSUInteger)count
+                               type:(IOSClass *)type {
+  return IOSObjectArray_NewArrayWithObjects((jint)count, type, objects);
 }
 
-+ (id)arrayWithObjects:(const id *)objects
-                 count:(NSUInteger)count
-                  type:(IOSClass *)type {
-  return [IOSObjectArray_NewArrayWithObjects(count, type, objects) autorelease];
++ (instancetype)arrayWithObjects:(const id *)objects
+                           count:(NSUInteger)count
+                            type:(IOSClass *)type {
+  return [IOSObjectArray_NewArrayWithObjects((jint)count, type, objects) autorelease];
 }
 
-+ (id)arrayWithArray:(IOSObjectArray *)array {
++ (instancetype)arrayWithArray:(IOSObjectArray *)array {
   return [IOSObjectArray arrayWithObjects:array->buffer_
                                     count:array->size_
                                      type:array->elementType_];
 }
 
-+ (id)arrayWithNSArray:(NSArray *)array type:(IOSClass *)type {
++ (instancetype)arrayWithNSArray:(NSArray *)array type:(IOSClass *)type {
   NSUInteger count = [array count];
-  id __unsafe_unretained *objects =
-      (id __unsafe_unretained *) malloc(sizeof(id) * count);
-  [array getObjects:objects range:NSMakeRange(0, count)];
-  id result = [IOSObjectArray arrayWithObjects:objects count:count type:type];
-  free(objects);
-  return result;
+  IOSObjectArray *result = IOSObjectArray_NewArray((jint)count, type);
+  [array getObjects:result->buffer_ range:NSMakeRange(0, count)];
+  for (NSUInteger i = 0; i < count; i++) {
+    [result->buffer_[i] retain];
+  }
+  return [result autorelease];
 }
 
-+ (id)arrayWithDimensions:(NSUInteger)dimensionCount
-                  lengths:(const int *)dimensionLengths
-                     type:(IOSClass *)type {
-  if (dimensionCount == 0) {
-    @throw AUTORELEASE([[JavaLangAssertionError alloc] initWithId:@"invalid dimension count"]);
-  }
++ (instancetype)arrayWithDimensions:(NSUInteger)dimensionCount
+                            lengths:(const jint *)dimensionLengths
+                               type:(IOSClass *)type {
+  return [IOSArray_NewArrayWithDimensions(
+      self, dimensionCount, dimensionLengths, type) autorelease];
+}
 
-  __unsafe_unretained IOSClass *componentTypes[dimensionCount];
-  componentTypes[dimensionCount - 1] = type;
-  for (int i = dimensionCount - 2; i >= 0; i--) {
-    componentTypes[i] = [IOSClass arrayClassWithComponentType:componentTypes[i + 1]];
-  }
-  return [self arrayWithDimensions:dimensionCount lengths:dimensionLengths types:componentTypes];
++ (instancetype)newArrayWithDimensions:(NSUInteger)dimensionCount
+                               lengths:(const jint *)dimensionLengths
+                                  type:(IOSClass *)type {
+  return IOSArray_NewArrayWithDimensions(self, dimensionCount, dimensionLengths, type);
 }
 
 + (id)iosClassWithType:(IOSClass *)type {
@@ -109,32 +110,58 @@ static IOSObjectArray *IOSObjectArray_NewArrayWithObjects(
 }
 
 id IOSObjectArray_Get(__unsafe_unretained IOSObjectArray *array, NSUInteger index) {
-  IOSArray_checkIndex(array->size_, index);
+  IOSArray_checkIndex(array->size_, (jint)index);
   return array->buffer_[index];
 }
 
 - (id)objectAtIndex:(NSUInteger)index {
-  IOSArray_checkIndex(size_, index);
+  IOSArray_checkIndex(size_, (jint)index);
   return buffer_[index];
 }
 
-__attribute__ ((unused))
+#if !defined(J2OBJC_DISABLE_ARRAY_CHECKS)
+static void ThrowArrayStoreException(IOSObjectArray *array, id value) {
+  NSString *msg = [NSString stringWithFormat:
+      @"attempt to add object of type %@ to array with type %@",
+      [[value getClass] getName], [array->elementType_ getName]];
+  @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
+}
+#endif
+
 static inline id IOSObjectArray_checkValue(
     __unsafe_unretained IOSObjectArray *array, __unsafe_unretained id value) {
 #if !defined(J2OBJC_DISABLE_ARRAY_CHECKS)
   if (value && ![array->elementType_ isInstance:value]) {
-    NSString *msg = [NSString stringWithFormat:
-        @"attempt to add object of type %@ to array with type %@",
-        [[value getClass] getName], [array->elementType_ getName]];
-    @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
+    ThrowArrayStoreException(array, value);
   }
 #endif
   return value;
 }
 
+// Same as above, but releases the value before throwing an exception.
+static inline void IOSObjectArray_checkRetainedValue(IOSObjectArray *array, id value) {
+#if !defined(J2OBJC_DISABLE_ARRAY_CHECKS)
+  if (value && ![array->elementType_ isInstance:value]) {
+    [value autorelease];
+    ThrowArrayStoreException(array, value);
+  }
+#endif
+}
+
+// Same as IOSArray_checkIndex, but releases the value before throwing an
+// exception.
+static inline void IOSObjectArray_checkIndexRetainedValue(jint size, jint index, id value) {
+#if !defined(J2OBJC_DISABLE_ARRAY_CHECKS)
+  if (index < 0 || index >= size) {
+    [value autorelease];
+    IOSArray_throwOutOfBoundsWithMsg(size, index);
+  }
+#endif
+}
+
 id IOSObjectArray_Set(
     __unsafe_unretained IOSObjectArray *array, NSUInteger index, __unsafe_unretained id value) {
-  IOSArray_checkIndex(array->size_, index);
+  IOSArray_checkIndex(array->size_, (jint)index);
   IOSObjectArray_checkValue(array, value);
 #if ! __has_feature(objc_arc)
   [array->buffer_[index] autorelease];
@@ -142,8 +169,15 @@ id IOSObjectArray_Set(
   return array->buffer_[index] = RETAIN_(value);
 }
 
+id IOSObjectArray_SetAndConsume(IOSObjectArray *array, NSUInteger index, id value) {
+  IOSObjectArray_checkIndexRetainedValue(array->size_, (jint)index, value);
+  IOSObjectArray_checkRetainedValue(array, value);
+  [array->buffer_[index] autorelease];
+  return array->buffer_[index] = value;
+}
+
 - (id)replaceObjectAtIndex:(NSUInteger)index withObject:(id)value {
-  IOSArray_checkIndex(size_, index);
+  IOSArray_checkIndex(size_, (jint)index);
   IOSObjectArray_checkValue(self, value);
 #if ! __has_feature(objc_arc)
   [buffer_[index] autorelease];
@@ -152,7 +186,7 @@ id IOSObjectArray_Set(
 }
 
 - (void)getObjects:(NSObject **)buffer length:(NSUInteger)length {
-  IOSArray_checkIndex(size_, length - 1);
+  IOSArray_checkIndex(size_, (jint)length - 1);
   for (NSUInteger i = 0; i < length; i++) {
     id element = buffer_[i];
     buffer[i] = element;
@@ -205,12 +239,12 @@ void CopyWithMemmove(id __strong *buffer, NSUInteger src, NSUInteger dest, NSUIn
 // experimentally on a OSX desktop device.
 #define ARC_MEMMOVE_OVERLAP_RATIO 15
 
-- (void) arraycopy:(NSRange)sourceRange
-       destination:(IOSArray *)destination
-            offset:(NSInteger)offset {
-  IOSArray_checkRange(size_, sourceRange);
-  IOSArray_checkRange(destination->size_,
-                      NSMakeRange(offset, sourceRange.length));
+- (void)arraycopy:(jint)offset
+      destination:(IOSArray *)destination
+        dstOffset:(jint)dstOffset
+           length:(jint)length {
+  IOSArray_checkRange(size_, offset, length);
+  IOSArray_checkRange(destination->size_, dstOffset, length);
   IOSObjectArray *dest = (IOSObjectArray *) destination;
 
 #ifdef J2OBJC_DISABLE_ARRAY_TYPE_CHECKS
@@ -224,43 +258,42 @@ void CopyWithMemmove(id __strong *buffer, NSUInteger src, NSUInteger dest, NSUIn
 
 #if __has_feature(objc_arc)
   if (self == dest) {
-    int shift = abs(offset - sourceRange.location);
-    if (sourceRange.length > ARC_MEMMOVE_OVERLAP_RATIO * shift) {
-      CopyWithMemmove(buffer_, sourceRange.location, offset, sourceRange.length);
-    } else if (sourceRange.location < offset) {
-      for (int i = sourceRange.length - 1; i >= 0; i--) {
-        buffer_[i + offset] = buffer_[i + sourceRange.location];
+    int shift = abs(dstOffset - offset);
+    if (length > ARC_MEMMOVE_OVERLAP_RATIO * shift) {
+      CopyWithMemmove(buffer_, offset, dstOffset, length);
+    } else if (offset < dstOffset) {
+      for (int i = length - 1; i >= 0; i--) {
+        buffer_[i + dstOffset] = buffer_[i + offset];
       }
     } else {
-      for (int i = 0; i < sourceRange.length; i++) {
-        buffer_[i + offset] = buffer_[i + sourceRange.location];
+      for (int i = 0; i < length; i++) {
+        buffer_[i + dstOffset] = buffer_[i + offset];
       }
     }
   } else if (skipElementCheck) {
-    for (int i = 0; i < sourceRange.length; i++) {
-      dest->buffer_[i + offset] = buffer_[i + sourceRange.location];
+    for (int i = 0; i < length; i++) {
+      dest->buffer_[i + dstOffset] = buffer_[i + offset];
     }
   } else {
-    for (int i = 0; i < sourceRange.length; i++) {
-      dest->buffer_[i + offset] =
-          IOSObjectArray_checkValue(dest, buffer_[i + sourceRange.location]);
+    for (int i = 0; i < length; i++) {
+      dest->buffer_[i + dstOffset] = IOSObjectArray_checkValue(dest, buffer_[i + offset]);
     }
   }
 #else
   if (self == dest) {
-    CopyWithMemmove(buffer_, sourceRange.location, offset, sourceRange.length);
+    CopyWithMemmove(buffer_, offset, dstOffset, length);
   } else if (skipElementCheck) {
-    for (int i = 0; i < sourceRange.length; i++) {
-      id newElement = buffer_[i + sourceRange.location];
-      [dest->buffer_[i + offset] autorelease];
-      dest->buffer_[i + offset] = [newElement retain];
+    for (jint i = 0; i < length; i++) {
+      id newElement = buffer_[i + offset];
+      [dest->buffer_[i + dstOffset] autorelease];
+      dest->buffer_[i + dstOffset] = [newElement retain];
     }
   } else {
-    for (int i = 0; i < sourceRange.length; i++) {
-      id newElement = skipElementCheck ? buffer_[i + sourceRange.location] :
-          IOSObjectArray_checkValue(dest, buffer_[i + sourceRange.location]);
-      [dest->buffer_[i + offset] autorelease];
-      dest->buffer_[i + offset] = [newElement retain];
+    for (jint i = 0; i < length; i++) {
+      id newElement = skipElementCheck ? buffer_[i + offset] :
+          IOSObjectArray_checkValue(dest, buffer_[i + offset]);
+      [dest->buffer_[i + dstOffset] autorelease];
+      dest->buffer_[i + dstOffset] = [newElement retain];
     }
   }
 #endif
@@ -268,21 +301,20 @@ void CopyWithMemmove(id __strong *buffer, NSUInteger src, NSUInteger dest, NSUIn
 
 - (id)copyWithZone:(NSZone *)zone {
   IOSObjectArray *result = IOSObjectArray_NewArray(size_, elementType_);
-  for (NSUInteger i = 0; i < size_; i++) {
+  for (jint i = 0; i < size_; i++) {
     result->buffer_[i] = [buffer_[i] retain];
   }
   return result;
 }
 
-- (NSString *)descriptionOfElementAtIndex:(NSUInteger)index {
+- (NSString *)descriptionOfElementAtIndex:(jint)index {
   return (NSString *) [buffer_[index] description];
 }
 
 - (void)dealloc {
-  for (NSUInteger i = 0; i < size_; i++) {
+  for (jint i = 0; i < size_; i++) {
     [buffer_[i] release];
   }
-  free(buffer_);
   [super dealloc];
 }
 
@@ -301,7 +333,7 @@ void CopyWithMemmove(id __strong *buffer, NSUInteger src, NSUInteger dest, NSUIn
 
 - (NSArray *)memDebugStrongReferences {
   NSMutableArray *result = [NSMutableArray array];
-  for (NSUInteger i = 0; i < size_; i++) {
+  for (jint i = 0; i < size_; i++) {
     [result addObject:[JreMemDebugStrongReference strongReferenceWithObject:buffer_[i] name:@"element"]];
   }
   return result;

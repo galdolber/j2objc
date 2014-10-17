@@ -23,7 +23,6 @@
 #include <math.h>
 #include "cbigint.h"
 #include "java/lang/OutOfMemoryError.h"
-#include "jni.h"
 
 /* ************************* Defines ************************* */
 #if defined(__linux__) || defined(__APPLE__)
@@ -212,7 +211,7 @@ static jdouble createDouble(const char* s, jint e) {
    *   3. (unprocessed digits + e) > 0 indicates that the value is
    *      simply too big to be stored as a double, so return Infinity
    */
-  if ((unprocessedDigits = strlen (s)) > 0)
+  if ((unprocessedDigits = (int) strlen (s)) > 0)
     {
       e += unprocessedDigits;
       if (index > -1)
@@ -651,7 +650,7 @@ static jfloat createFloat(const char* s, jint e) {
    *   3. (unprocessed digits + e) > 0 indicates that the value is
    *      simply too big to be stored as a double, so return Infinity
    */
-  if ((unprocessedDigits = strlen (s)) > 0)
+  if ((unprocessedDigits = (int) strlen (s)) > 0)
     {
       e += unprocessedDigits;
       if (index > -1)

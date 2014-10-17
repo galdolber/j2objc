@@ -39,8 +39,8 @@ BOOL JreMemDebugEnabled = NO;
 #if __has_feature(objc_arc)
 
 // We don't implement memory usage debug when ARC is enabled because we rely
-// on JreOperatorRetainedAssign() to lock properly to avoid some memory
-// inconsistency while running JreMemDebugGenerateAllocationsReport().
+// on JreStrongAssign() to lock properly to avoid some memory inconsistency
+// while running JreMemDebugGenerateAllocationsReport().
 
 FOUNDATION_EXPORT id JreMemDebugAddInternal(id obj) {
   return obj;
@@ -472,11 +472,11 @@ FOUNDATION_EXPORT void JreMemDebugGenerateAllocationsReport(void) {
       sortedArrayUsingSelector:@selector(compare:)]) {
     NSData *stacktrace = [identifierToStacktrace objectForKey:identifier];
     void *addresses[512];
-    int count;
+    size_t count;
     memcpy(addresses, [stacktrace bytes], [stacktrace length]);
     count = [stacktrace length] / sizeof(addresses[0]);
     fprintf(f, "%s:", [identifier UTF8String]);
-    for (unsigned int i = 0 ; i < count ; i ++) {
+    for (size_t i = 0 ; i < count ; i ++) {
       fprintf(f, " %p", addresses[i]);
     }
     fprintf(f, "\n");

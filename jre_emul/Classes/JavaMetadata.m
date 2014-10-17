@@ -32,7 +32,7 @@
 @synthesize methodCount;
 @synthesize modifiers;
 
-- (id)initWithMetadata:(J2ObjcClassInfo *)metadata {
+- (instancetype)initWithMetadata:(J2ObjcClassInfo *)metadata {
   if (self = [super init]) {
     data_ = metadata;
     NSStringEncoding defaultEncoding = [NSString defaultCStringEncoding];
@@ -83,16 +83,18 @@
 
 - (const J2ObjcFieldInfo *)findFieldInfo:(const char *)fieldName {
   for (int i = 0; i < data_->fieldCount; i++) {
-    if (data_->fields[i].javaName) {
-      if (strcmp(fieldName, data_->fields[i].javaName) == 0) {
-        return &data_->fields[i];
-      }
-    } else {
-      // Field name has standard trailing underscore added.
-      int n = strlen(data_->fields[i].name) - 1;
-      if (strncmp(fieldName, data_->fields[i].name, n) == 0) {
-        return &data_->fields[i];
-      }
+    const J2ObjcFieldInfo *fieldInfo = &data_->fields[i];
+    if (fieldInfo->javaName && strcmp(fieldName, fieldInfo->javaName) == 0) {
+      return fieldInfo;
+    }
+    if (strcmp(fieldName, fieldInfo->name) == 0) {
+      return fieldInfo;
+    }
+    // See if field name has trailing underscore added.
+    size_t max  = strlen(fieldInfo->name) - 1;
+    if (fieldInfo->name[max] == '_' && strlen(fieldName) == max &&
+        strncmp(fieldName, fieldInfo->name, max) == 0) {
+      return fieldInfo;
     }
   }
   return nil;
@@ -159,7 +161,7 @@
 
 @implementation JavaFieldMetadata
 
-- (id)initWithMetadata:(const J2ObjcFieldInfo *)metadata {
+- (instancetype)initWithMetadata:(const J2ObjcFieldInfo *)metadata {
   if (self = [super init]) {
     data_ = metadata;
   }
@@ -200,7 +202,7 @@
 
 @implementation JavaMethodMetadata
 
-- (id)initWithMetadata:(const J2ObjcMethodInfo *)metadata {
+- (instancetype)initWithMetadata:(const J2ObjcMethodInfo *)metadata {
   if (self = [super init]) {
     data_ = metadata;
   }
@@ -233,10 +235,10 @@
   NSString *exceptionsStr = [NSString stringWithUTF8String:data_->exceptions];
   NSArray *exceptionsArray = [exceptionsStr componentsSeparatedByString:@";"];
   // The last string is empty, due to the trailing semi-colon of the last exception.
-  int n = [exceptionsArray count] - 1;
-  IOSObjectArray *result = [IOSObjectArray arrayWithLength:n type:[IOSClass getClass]];
-  NSUInteger count = 0;
-  for (int i = 0; i < n; i++) {
+  NSUInteger n = [exceptionsArray count] - 1;
+  IOSObjectArray *result = [IOSObjectArray arrayWithLength:(jint)n type:[IOSClass getClass]];
+  jint count = 0;
+  for (NSUInteger i = 0; i < n; i++) {
     // Strip off leading 'L'.
     NSString *thrownException = [[exceptionsArray objectAtIndex:i] substringFromIndex:1];
     IOSObjectArray_Set(result, count++, [IOSClass forName:thrownException]);

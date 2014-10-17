@@ -28,6 +28,7 @@
 # CLANG_ENABLE_OBJC_ARC=YES Translate and build with ARC
 # MAX_STACK_FRAMES          The maximum number of exception stack trace frames
 # NO_STACK_FRAME_SYMBOLS    If set, exception stack traces only have addresses
+# GENERATE_TEST_COVERAGE    If set, adds flags to generate test coverage files.
 #
 # Author: Tom Ball
 
@@ -52,6 +53,8 @@ ANDROID_CORE_ROOT = $(ANDROID_BASE)/frameworks/base/core/java
 ANDROID_CORE_TESTS_ROOT = $(ANDROID_BASE)/frameworks/base/core/tests/coretests/src
 LIBCORE_BASE = $(ANDROID_BASE)/libcore
 ANDROID_DALVIK_ROOT = $(LIBCORE_BASE)/dalvik/src/main/java
+ANDROID_JSON_ROOT = $(LIBCORE_BASE)/json/src/main/java
+ANDROID_JSON_TEST_ROOT = $(LIBCORE_BASE)/json/src/test/java
 ANDROID_LUNI_ROOT = $(LIBCORE_BASE)/luni/src/main/java
 ANDROID_LUNI_TEST_ROOT = $(LIBCORE_BASE)/luni/src/test/java
 ANDROID_TEST_SUPPORT_ROOT = $(LIBCORE_BASE)/support/src/test/java
@@ -79,6 +82,7 @@ MAIN_LIB = $(BUILD_DIR)/libj2objc_main.a
 MAIN_LIB_DIST = $(DIST_LIB_DIR)/libj2objc_main.a
 EMULATION_CLASS_DIR = Classes
 TESTS_DIR = $(BUILD_DIR)/tests
+RELATIVE_TESTS_DIR = $(BUILD_DIR_NAME)/tests
 STUBS_DIR = stub_classes
 ANDROID_NATIVE_DIR = $(LIBCORE_BASE)/luni/src/main/native
 
@@ -89,19 +93,20 @@ endif
 JRE_SRC_ROOTS = $(JRE_ROOT) $(JRE_CONCURRENT_ROOT) $(JRE_KERNEL_ROOT) \
     $(JRE_MATH_ROOT) $(ANDROID_DALVIK_ROOT) $(ANDROID_LUNI_ROOT) \
     $(ANDROID_XML_ROOT) $(EMULATION_CLASS_DIR) $(JRE_ARCHIVE_ROOT) \
-    $(ANDROID_CORE_ROOT)
+    $(ANDROID_CORE_ROOT) $(ANDROID_JSON_ROOT)
 JRE_SRC = $(subst $(eval) ,:,$(JRE_SRC_ROOTS))
 TEST_SRC_ROOTS = $(JRE_TEST_ROOT) $(JRE_MATH_TEST_ROOT) \
     $(TEST_SUPPORT_ROOT) $(MATH_TEST_SUPPORT_ROOT) $(REGEX_TEST_ROOT) \
     $(CONCURRENT_TEST_ROOT) $(MISC_TEST_ROOT) $(ANDROID_TEST_SUPPORT_ROOT) \
     $(JRE_TEXT_TEST_ROOT) $(ANDROID_LUNI_TEST_ROOT) $(ARCHIVE_TEST_ROOT) \
     $(ANDROID_APACHE_TEST_ROOT) $(LOGGING_TEST_ROOT) \
-    $(ANDROID_CORE_TESTS_ROOT) $(ANDROID_TESTS_RUNNER_ROOT)
+    $(ANDROID_CORE_TESTS_ROOT) $(ANDROID_TESTS_RUNNER_ROOT) \
+    $(ANDROID_JSON_TEST_ROOT)
 TEST_SRC = $(subst $(eval) ,:,$(TEST_SRC_ROOTS))
 vpath %.java $(JRE_SRC):$(TEST_SRC):$(STUBS_DIR)
 
 # Clang warnings
-WARNINGS := $(WARNINGS) -Wall -Werror
+WARNINGS := $(WARNINGS) -Wall -Werror -Wshorten-64-to-32 -Wsign-compare
 
 # Require C11 compilation to support Java volatile translation.
 OBJCFLAGS := -std=c11
@@ -125,6 +130,10 @@ endif
 
 ifdef NO_STACK_FRAME_SYMBOLS
 OBJCFLAGS += -DNO_STACK_FRAME_SYMBOLS=$(NO_STACK_FRAME_SYMBOLS)
+endif
+
+ifdef GENERATE_TEST_COVERAGE
+OBJCFLAGS += -ftest-coverage -fprofile-arcs
 endif
 
 # Settings for classes that need to always compile without ARC.

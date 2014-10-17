@@ -14,7 +14,7 @@
 #
 # Author: Tom Ball
 
-.SUFFIXES: .java .m
+.SUFFIXES:
 .PHONY: default clean
 
 include environment.mk
@@ -67,7 +67,6 @@ include ../make/translate.mk
 ARCH_HEADERS = $(TRANSLATE_HEADERS:$(GEN_OBJC_DIR)/%=$(ARCH_INCLUDE_DIR)/%)
 
 FAT_LIB_NAME = jsr305
-FAT_LIB_SOURCES_FULL = $(TRANSLATE_SOURCES)
 FAT_LIB_SOURCES_RELATIVE = $(TRANSLATE_SOURCES:$(GEN_OBJC_DIR)/%=%)
 FAT_LIB_SOURCE_DIRS = $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(J2OBJCC) -fobjc-abi-version=2 -fobjc-legacy-dispatch
@@ -87,6 +86,8 @@ classes: $(JAVA_SOURCES_MANIFEST)
 
 lib: $(FAT_LIB_LIBRARY)
 	@:
+
+$(JSR305_SRC_JAR): | java_deps_dist
 
 $(BUILD_DIR)/.extracted: $(JSR305_SRC_JAR) | $(BUILD_DIR)
 	@mkdir -p $(JAVA_SRC_DIR)

@@ -19,6 +19,7 @@
 
 #import "IOSProtocolClass.h"
 #import "JavaMetadata.h"
+#import "java/lang/IllegalArgumentException.h"
 #import "java/lang/reflect/Method.h"
 #import "java/lang/reflect/Modifier.h"
 #import "objc/runtime.h"
@@ -27,7 +28,7 @@
 
 @synthesize objcProtocol = protocol_;
 
-- (id)initWithProtocol:(Protocol *)protocol {
+- (instancetype)initWithProtocol:(Protocol *)protocol {
   if ((self = [super init])) {
     protocol_ = RETAIN_(protocol);
   }
@@ -128,19 +129,39 @@
     }
   }
   free(descriptions);
+  if (!result) {
+    // Search super-interfaces.
+    for (IOSClass *cls in [self getInterfacesWithArrayType:nil]) {
+      if (cls != self) {
+        result = [cls findMethodWithTranslatedName:objcName];
+        if (result) {
+          break;
+        }
+      }
+    }
+  }
+  if (!result) {
+    NSString *errMsg = [NSString stringWithFormat:@"no such method %@ in %@ interface",
+                        objcName, [self getName]];
+    @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc] initWithNSString:errMsg]);
+  }
   return result;
 }
 
 - (IOSObjectArray *)getInterfacesWithArrayType:(IOSClass *)arrayType {
   unsigned int outCount;
   Protocol * __unsafe_unretained *interfaces = protocol_copyProtocolList(protocol_, &outCount);
-  IOSObjectArray *result = [IOSObjectArray arrayWithLength:outCount type:[IOSClass getClass]];
+  NSMutableArray *result = [NSMutableArray arrayWithCapacity:outCount];
   for (unsigned i = 0; i < outCount; i++) {
     IOSClass *interface = [IOSClass classWithProtocol:interfaces[i]];
-    [result replaceObjectAtIndex:i withObject:interface];
+    NSString *name = [interface getName];
+    // Don't include NSObject and JavaObject interfaces, since java.lang.Object is a class.
+    if (![name isEqualToString:@"JavaObject"] && ![name isEqualToString:@"java.lang.Object"]) {
+      [result addObject:interface];
+    }
   }
   free(interfaces);
-  return result;
+  return [IOSObjectArray arrayWithNSArray:result type:[IOSClass getClass]];
 }
 
 #if ! __has_feature(objc_arc)

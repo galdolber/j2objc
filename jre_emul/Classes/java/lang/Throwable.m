@@ -66,25 +66,25 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
   return self;
 }
 
-- (id)init {
+- (instancetype)init {
   return [self initJavaLangThrowableWithNSString:nil withJavaLangThrowable:nil];
 }
 
-- (id)initWithNSString:(NSString *)message {
+- (instancetype)initWithNSString:(NSString *)message {
   return [self initJavaLangThrowableWithNSString:message withJavaLangThrowable:nil];
 }
 
-- (id)initWithNSString:(NSString *)message
+- (instancetype)initWithNSString:(NSString *)message
     withJavaLangThrowable:(JavaLangThrowable *)causeArg {
   return [self initJavaLangThrowableWithNSString:message withJavaLangThrowable:causeArg];
 }
 
-- (id)initWithJavaLangThrowable:(JavaLangThrowable *)causeArg {
+- (instancetype)initWithJavaLangThrowable:(JavaLangThrowable *)causeArg {
   return [self initJavaLangThrowableWithNSString:causeArg ? [causeArg description] : nil
                            withJavaLangThrowable:causeArg];
 }
 
-- (id)initWithNSString:(NSString *)message
+- (instancetype)initWithNSString:(NSString *)message
  withJavaLangThrowable:(JavaLangThrowable *)causeArg
            withBoolean:(BOOL)enableSuppression
            withBoolean:(BOOL)writeableStackTrace {
@@ -97,7 +97,7 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
     @synchronized (self) {
       if (rawCallStack) {
         NSMutableArray *frames = [NSMutableArray array];
-        for (int i = 0; i < rawFrameCount; i++) {
+        for (unsigned i = 0; i < rawFrameCount; i++) {
           JavaLangStackTraceElement *element = AUTORELEASE(
               [[JavaLangStackTraceElement alloc] initWithLong:(long long int) rawCallStack[i]]);
           // Filter out native functions (no class), NSInvocation methods, and internal constructor.
@@ -175,7 +175,7 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
 - (void)printStackTraceWithJavaIoPrintWriter:(JavaIoPrintWriter *)pw {
   [pw printlnWithNSString:[self description]];
   IOSObjectArray *trace = [self filterStackTrace];
-  for (NSUInteger i = 0; i < trace->size_; i++) {
+  for (jint i = 0; i < trace->size_; i++) {
     [pw printWithNSString:@"\tat "];
     id frame = trace->buffer_[i];
     [pw printlnWithId:frame];
@@ -189,7 +189,7 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
 - (void)printStackTraceWithJavaIoPrintStream:(JavaIoPrintStream *)ps {
   [ps printlnWithNSString:[self description]];
   IOSObjectArray *trace = [self filterStackTrace];
-  for (NSUInteger i = 0; i < trace->size_; i++) {
+  for (jint i = 0; i < trace->size_; i++) {
     [ps printWithNSString:@"\tat "];
     id frame = trace->buffer_[i];
     [ps printlnWithId:frame];
@@ -205,8 +205,8 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
   nil_chk(stackTraceArg);
   @synchronized (self) {
     [self maybeFreeRawCallStack];
-    int count = [stackTraceArg count];
-    for (int i = 0; i < count; i++) {
+    jint count = stackTraceArg->size_;
+    for (jint i = 0; i < count; i++) {
       nil_chk(stackTraceArg->buffer_[i]);
     }
 #if __has_feature(objc_arc)
@@ -224,11 +224,10 @@ void FillInStackTraceInternal(JavaLangThrowable *this) {
     @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc] init]);
   }
   @synchronized (self) {
-    NSUInteger existingCount =
-        suppressedExceptions ? [suppressedExceptions count] : 0;
+    jint existingCount = suppressedExceptions ? suppressedExceptions->size_ : 0;
     IOSObjectArray *newArray = [IOSObjectArray newArrayWithLength:existingCount + 1
         type:[IOSClass classWithClass:[JavaLangThrowable class]]];
-    for (NSUInteger i = 0; i < existingCount; i++) {
+    for (jint i = 0; i < existingCount; i++) {
       [newArray replaceObjectAtIndex:i withObject:suppressedExceptions->buffer_[i]];
     }
     [newArray replaceObjectAtIndex:existingCount

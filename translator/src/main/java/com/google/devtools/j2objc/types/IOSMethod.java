@@ -32,19 +32,13 @@ import java.util.List;
  */
 public class IOSMethod {
   private final String name;
-  private final boolean isFunction;
   private final String declaringClass;
   private final List<IOSParameter> parameters;
   private boolean varArgs = false;
 
-  public static final IOSMethod DEREFERENCE = newFunction("_dereference_");
-  public static final IOSMethod ADDRESS_OF = newFunction("_address_of_");
-
   private IOSMethod(
-      String name, boolean isFunction, String declaringClass, List<IOSParameter> parameters,
-      boolean varArgs) {
+      String name, String declaringClass, List<IOSParameter> parameters, boolean varArgs) {
     this.name = name;
-    this.isFunction = isFunction;
     this.declaringClass = declaringClass;
     this.parameters = parameters != null ? parameters : Collections.<IOSParameter>emptyList();
     this.varArgs = varArgs;
@@ -74,23 +68,11 @@ public class IOSMethod {
         }
       }
     }
-    return new IOSMethod(name, false, className, parameters.build(), varArgs);
-  }
-
-  public static IOSMethod newFunction(String name) {
-    return newFunction(name, false);
-  }
-
-  public static IOSMethod newFunction(String name, boolean varargs) {
-    return new IOSMethod(name, true, null, null, varargs);
+    return new IOSMethod(name, className, parameters.build(), varArgs);
   }
 
   public String getName() {
     return name;
-  }
-
-  public boolean isFunction() {
-    return isFunction;
   }
 
   public String getDeclaringClass() {
@@ -113,7 +95,9 @@ public class IOSMethod {
       // If a type has spaces in it (ie, foo *), combine the parts.
       if (part.contains("(")) {
         while (!part.contains(")")) {
-          assert i + 1 < parts.length;
+          if (i + 1 >= parts.length) {
+            throw new IllegalArgumentException("invalid Objective-C parameter string: " + s);
+          }
           part += ' ' + parts[++i];
         }
       }

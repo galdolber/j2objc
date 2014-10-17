@@ -16,34 +16,18 @@
 
 package com.google.devtools.j2objc.types;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.util.BindingUtil;
-import com.google.devtools.j2objc.util.ErrorUtil;
 
 import org.eclipse.jdt.core.dom.AST;
-import org.eclipse.jdt.core.dom.ASTNode;
-import org.eclipse.jdt.core.dom.Block;
 import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.Expression;
-import org.eclipse.jdt.core.dom.IAnnotationBinding;
-import org.eclipse.jdt.core.dom.IBinding;
-import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
-import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.Modifier;
-import org.eclipse.jdt.core.dom.SimpleType;
-import org.eclipse.jdt.core.dom.Type;
 
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-/*
+/**
  * Types is a singleton service class for type-related operations.
  *
  * @author Tom Ball
@@ -52,14 +36,12 @@ import java.util.Set;
 // core to be reused for other languages.
 public class Types {
   private final AST ast;
-  private final Map<Object, IBinding> bindingMap;
   private final Map<ITypeBinding, ITypeBinding> typeMap = Maps.newHashMap();
   private final Map<ITypeBinding, ITypeBinding> renamedTypeMap = Maps.newHashMap();
   private final Map<ITypeBinding, ITypeBinding> primitiveToWrapperTypes =
       new HashMap<ITypeBinding, ITypeBinding>();
   private final Map<ITypeBinding, ITypeBinding> wrapperToPrimitiveTypes =
       new HashMap<ITypeBinding, ITypeBinding>();
-  private final List<IVariableBinding> releaseableFields = Lists.newArrayList();
   private final ITypeBinding javaObjectType;
   private final ITypeBinding javaClassType;
   private final ITypeBinding javaCloneableType;
@@ -89,13 +71,8 @@ public class Types {
   // Map a primitive type to its emulation array type.
   private final Map<ITypeBinding, IOSTypeBinding> arrayBindingMap = Maps.newHashMap();
 
-  private final Set<Block> autoreleasePoolBlocks = Sets.newHashSet();
-  private final Set<Expression> nilChecks = Sets.newHashSet();
-  private final Set<Expression> deferredFieldSetters = Sets.newHashSet();
-
-  // The first argument of a iOS method isn't named, but Java requires some sort of valid parameter
-  // name.  The method mapper therefore uses this string, which the generators ignore.
-  public static final String EMPTY_PARAMETER_NAME = "__empty_parameter__";
+  // Cache of pointer types.
+  private final Map<ITypeBinding, PointerTypeBinding> pointerTypeMap = Maps.newHashMap();
 
   private Types(CompilationUnit unit) {
     ast = unit.getAST();
@@ -124,7 +101,6 @@ public class Types {
     initializeTypeMap();
     initializeCommonJavaTypes();
     populatePrimitiveAndWrapperTypeMaps();
-    bindingMap = BindingMapBuilder.buildBindingMap(unit);
   }
 
   private IOSTypeBinding mapIOSType(IOSTypeBinding type) {
@@ -256,117 +232,41 @@ public class Types {
     return instance.javaStringType.equals(type);
   }
 
+  public static boolean isStringType(ITypeBinding type) {
+    return instance.javaStringType.isEqualTo(type)
+        || instance.NSString.isEqualTo(type);
+  }
+
   public static boolean isFloatingPointType(ITypeBinding type) {
-    return type.isEqualTo(instance.ast.resolveWellKnownType("double")) ||
-        type.isEqualTo(instance.ast.resolveWellKnownType("float")) ||
-        type == instance.ast.resolveWellKnownType("java.lang.Double") ||
-        type == instance.ast.resolveWellKnownType("java.lang.Float");
+    return type.isEqualTo(instance.ast.resolveWellKnownType("double"))
+        || type.isEqualTo(instance.ast.resolveWellKnownType("float"))
+        || type == instance.ast.resolveWellKnownType("java.lang.Double")
+        || type == instance.ast.resolveWellKnownType("java.lang.Float");
   }
 
   public static boolean isBooleanType(ITypeBinding type) {
-    return type.isEqualTo(instance.booleanType) ||
-        type == instance.ast.resolveWellKnownType("java.lang.Boolean");
+    return type.isEqualTo(instance.booleanType)
+        || type == instance.ast.resolveWellKnownType("java.lang.Boolean");
+  }
+
+  public static boolean isIntegralType(ITypeBinding type) {
+    return type.isEqualTo(instance.ast.resolveWellKnownType("byte"))
+        || type.isEqualTo(instance.ast.resolveWellKnownType("short"))
+        || type.isEqualTo(instance.ast.resolveWellKnownType("int"))
+        || type == instance.ast.resolveWellKnownType("java.lang.Byte")
+        || type == instance.ast.resolveWellKnownType("java.lang.Short")
+        || type == instance.ast.resolveWellKnownType("java.lang.Integer")
+        || isLongType(type);
   }
 
   public static boolean isLongType(ITypeBinding type) {
-    return type.isEqualTo(instance.ast.resolveWellKnownType("long")) ||
-        type == instance.ast.resolveWellKnownType("java.lang.Long");
-  }
-
-  public static ITypeBinding resolveIOSType(Type type) {
-    if (type instanceof SimpleType) {
-      String name = ((SimpleType) type).getName().getFullyQualifiedName();
-      return resolveIOSType(name);
-    }
-    return null;
+    return type.isEqualTo(instance.ast.resolveWellKnownType("long"))
+        || type == instance.ast.resolveWellKnownType("java.lang.Long");
   }
 
   public static IOSTypeBinding resolveArrayType(ITypeBinding binding) {
     IOSTypeBinding arrayBinding = instance.arrayBindingMap.get(binding);
     return arrayBinding != null ? arrayBinding : instance.IOSObjectArray;
-  }
-
-  public static IBinding getBinding(Object node) {
-    IBinding binding = instance.bindingMap.get(node);
-    assert binding != null;
-    return binding;
-  }
-
-  public static void addBinding(Object node, IBinding binding) {
-    assert binding != null;
-    instance.bindingMap.put(node, binding);
-  }
-
-  /**
-   * Return a type binding for a specified ASTNode or IOS node, or null if
-   * no type binding exists.
-   */
-  public static ITypeBinding getTypeBinding(Object node) {
-    IBinding binding = getBinding(node);
-    if (binding instanceof ITypeBinding) {
-      return (ITypeBinding) binding;
-    } else if (binding instanceof IMethodBinding) {
-      IMethodBinding m = (IMethodBinding) binding;
-      return m.isConstructor() ? m.getDeclaringClass() : m.getReturnType();
-    } else if (binding instanceof IVariableBinding) {
-      return ((IVariableBinding) binding).getType();
-    } else if (binding instanceof IAnnotationBinding) {
-      return ((IAnnotationBinding) binding).getAnnotationType();
-    }
-    return null;
-  }
-
-  /**
-   * Return a type binding for a specified ASTNode or IOS node, or null if
-   * no type binding exists.
-   */
-  public static IAnnotationBinding getAnnotationBinding(Object node) {
-    IBinding binding = getBinding(node);
-    if (binding instanceof IAnnotationBinding) {
-      return (IAnnotationBinding) binding;
-    }
-    return null;
-  }
-
-  public static IMethodBinding getMethodBinding(Object node) {
-    IBinding binding = getBinding(node);
-    return binding instanceof IMethodBinding ? ((IMethodBinding) binding) : null;
-  }
-
-  /**
-   * Gets a GeneratedMethodBinding for an ASTNode, replacing the IMethodBinding
-   * if there is one.
-   */
-  public static GeneratedMethodBinding getGeneratedMethodBinding(Object node) {
-    IMethodBinding binding = getMethodBinding(node);
-    if (binding == null) {
-      return null;
-    }
-    // We must create a copy since the caller expects to mutate the binding and
-    // we need to avoid side-effect for other nodes that refer to the same
-    // binding.
-    GeneratedMethodBinding newBinding = new GeneratedMethodBinding(binding.getMethodDeclaration());
-    addBinding(node, newBinding);
-    return newBinding;
-  }
-
-  public static IVariableBinding getVariableBinding(Object node) {
-    IBinding binding = getBinding(node);
-    return binding instanceof IVariableBinding ? ((IVariableBinding) binding) : null;
-  }
-
-  /**
-   * Walks an AST and asserts there is a resolved binding for every
-   * ASTNode type that is supposed to have one.
-   */
-  public static void verifyNode(ASTNode node) {
-    BindingMapVerifier.verify(node, instance.bindingMap);
-  }
-
-  public static void verifyNodes(List<? extends ASTNode> nodes) {
-    for (ASTNode node : nodes) {
-      BindingMapVerifier.verify(node, instance.bindingMap);
-    }
   }
 
   public static ITypeBinding renameTypeBinding(String newName, ITypeBinding newDeclaringClass,
@@ -382,26 +282,12 @@ public class Types {
         ? instance.renamedTypeMap.get(original) : original;
   }
 
-  public static boolean isVoidType(Type type) {
-    return isVoidType(getTypeBinding(type));
-  }
-
   public static boolean isVoidType(ITypeBinding type) {
     return type.isEqualTo(instance.voidType);
   }
 
   public static boolean isJavaVoidType(ITypeBinding type) {
     return type.isEqualTo(instance.javaVoidType);
-  }
-
-  public static void addReleaseableFields(Collection<IVariableBinding> fields) {
-    for (IVariableBinding field : fields) {
-      instance.releaseableFields.add(field.getVariableDeclaration());
-    }
-  }
-
-  public static boolean isReleaseableField(IVariableBinding var) {
-    return var != null ? instance.releaseableFields.contains(var.getVariableDeclaration()) : false;
   }
 
   public static ITypeBinding getWrapperType(ITypeBinding primitiveType) {
@@ -432,31 +318,13 @@ public class Types {
     return instance.IOSClass;
   }
 
-  public static void addAutoreleasePool(Block block) {
-    if (Options.useGC()) {
-      ErrorUtil.warning(block, "@AutoreleasePool ignored in GC mode");
+  public static PointerTypeBinding getPointerType(ITypeBinding type) {
+    PointerTypeBinding result = instance.pointerTypeMap.get(type);
+    if (result == null) {
+      result = new PointerTypeBinding(type);
+      instance.pointerTypeMap.put(type, result);
     }
-    instance.autoreleasePoolBlocks.add(block);
-  }
-
-  public static boolean hasAutoreleasePool(Block block) {
-    return instance.autoreleasePoolBlocks.contains(block);
-  }
-
-  public static void addNilCheck(Expression expression) {
-    instance.nilChecks.add(expression);
-  }
-
-  public static boolean hasNilCheck(Expression expression) {
-    return instance.nilChecks.contains(expression);
-  }
-
-  public static void addDeferredFieldSetter(Expression expression) {
-    instance.deferredFieldSetters.add(expression);
-  }
-
-  public static boolean hasDeferredFieldSetter(Expression expression) {
-    return instance.deferredFieldSetters.contains(expression);
+    return result;
   }
 
   public static ITypeBinding getLocalRefType() {

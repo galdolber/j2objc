@@ -12,15 +12,15 @@
 @private
   NSData *data_;
   const char *bytes_;
-  int position_;
-  int length_;
+  size_t position_;
+  size_t length_;
 }
 
 @end
 
 @implementation NSDataInputStream
 
-- (id)initWithData:(NSData *)data {
+- (instancetype)initWithData:(NSData *)data {
   if ((self = [super init])) {
     data_ = [nil_chk(data) copy];
     bytes_ = (const char *) [data_ bytes];
@@ -42,33 +42,33 @@
 }
 #endif
 
-- (int)read {
+- (jint)read {
   if (position_ == length_) {
     return -1;
   }
 
   // Ensure that we don't sign extend and accidentally return -1
   unsigned char c = bytes_[position_++];
-  return (int) c;
+  return (jint) c;
 }
 
-- (int)readWithJavaLangByteArray:(IOSByteArray *)b
-                         withInt:(int)offset
-                         withInt:(int)len {
+- (jint)readWithJavaLangByteArray:(IOSByteArray *)b
+                          withInt:(jint)offset
+                          withInt:(jint)len {
   if (len == 0) {
     return 0;
   }
 
-  if (position_ == length_) {
+  if ((size_t) position_ == length_) {
     return -1;
   }
 
-  int remaining = [data_ length] - position_;
+  jint remaining = (jint) ([data_ length] - position_);
   if (remaining < len) {
     len = remaining;
   }
 
-  [nil_chk(b) replaceBytes:bytes_ + position_
+  [nil_chk(b) replaceBytes:(const jbyte *)(bytes_ + position_)
                     length:len
                     offset:offset];
   position_ += len;

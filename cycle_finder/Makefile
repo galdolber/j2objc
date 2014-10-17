@@ -16,6 +16,8 @@
 #
 # Author: Keith Stanger
 
+SUFFIXES:
+
 SOURCE_DIR = src/main
 JAVA_SOURCE_DIR = $(SOURCE_DIR)/java
 RESOURCE_DIR = $(SOURCE_DIR)/resources
@@ -32,11 +34,11 @@ TEST_CLASS_DIR = $(BUILD_DIR)/test
 JAVA_SOURCES = \
     com/google/devtools/cyclefinder/CycleFinder.java \
     com/google/devtools/cyclefinder/Edge.java \
+    com/google/devtools/cyclefinder/NameList.java \
     com/google/devtools/cyclefinder/Options.java \
     com/google/devtools/cyclefinder/ReferenceGraph.java \
     com/google/devtools/cyclefinder/Tarjans.java \
-    com/google/devtools/cyclefinder/TypeCollector.java \
-    com/google/devtools/cyclefinder/Whitelist.java
+    com/google/devtools/cyclefinder/TypeCollector.java
 
 RESOURCES = \
     com/google/devtools/cyclefinder/CycleFinder.properties
@@ -96,6 +98,7 @@ $(JAR_DIST): $(JAR) | $(DIST_JAR_DIR)
 	install -m 0644 $< $@
 
 dist: $(JAR_DIST) $(DIST_DIR)/cycle_finder
+	@:
 
 test: compile-tests
 	java -classpath $(TEST_CLASSPATH) junit.textui.TestRunner \

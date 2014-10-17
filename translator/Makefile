@@ -16,6 +16,8 @@
 #
 # Author: Tom Ball, Keith Stanger
 
+SUFFIXES:
+
 CWD = .
 SOURCE_DIR = src/main
 JAVA_SOURCE_DIR = $(SOURCE_DIR)/java
@@ -53,7 +55,105 @@ JAVA_SOURCES = \
 	Options.java \
 	Plugin.java \
 	TranslationProcessor.java \
-	gen/HiddenFieldDetector.java \
+	ast/AbstractTypeDeclaration.java \
+	ast/Annotation.java \
+	ast/AnnotationTypeDeclaration.java \
+	ast/AnnotationTypeMemberDeclaration.java \
+	ast/AnonymousClassDeclaration.java \
+	ast/ArrayAccess.java \
+	ast/ArrayCreation.java \
+	ast/ArrayInitializer.java \
+	ast/ArrayType.java \
+	ast/AssertStatement.java \
+	ast/Assignment.java \
+	ast/Block.java \
+	ast/BlockComment.java \
+	ast/BodyDeclaration.java \
+	ast/BooleanLiteral.java \
+	ast/BreakStatement.java \
+	ast/CStringLiteral.java \
+	ast/CastExpression.java \
+	ast/CatchClause.java \
+	ast/CharacterLiteral.java \
+	ast/ChildLink.java \
+	ast/ChildList.java \
+	ast/ClassInstanceCreation.java \
+	ast/Comment.java \
+	ast/CompilationUnit.java \
+	ast/ConditionalExpression.java \
+	ast/ConstructorInvocation.java \
+	ast/ContinueStatement.java \
+	ast/DebugASTPrinter.java \
+	ast/DoStatement.java \
+	ast/EmptyStatement.java \
+	ast/EnhancedForStatement.java \
+	ast/EnumConstantDeclaration.java \
+	ast/EnumDeclaration.java \
+	ast/Expression.java \
+	ast/ExpressionStatement.java \
+	ast/FieldAccess.java \
+	ast/FieldDeclaration.java \
+	ast/ForStatement.java \
+	ast/FunctionDeclaration.java \
+	ast/FunctionInvocation.java \
+	ast/IfStatement.java \
+	ast/InfixExpression.java \
+	ast/Initializer.java \
+	ast/InstanceofExpression.java \
+	ast/Javadoc.java \
+	ast/LabeledStatement.java \
+	ast/LineComment.java \
+	ast/MarkerAnnotation.java \
+	ast/MemberValuePair.java \
+	ast/MethodDeclaration.java \
+	ast/MethodInvocation.java \
+	ast/Name.java \
+	ast/NativeDeclaration.java \
+	ast/NativeStatement.java \
+	ast/NormalAnnotation.java \
+	ast/NullLiteral.java \
+	ast/NumberLiteral.java \
+	ast/PackageDeclaration.java \
+	ast/ParameterizedType.java \
+	ast/ParenthesizedExpression.java \
+	ast/PostfixExpression.java \
+	ast/PrefixExpression.java \
+	ast/PrimitiveType.java \
+	ast/QualifiedName.java \
+	ast/QualifiedType.java \
+	ast/ReturnStatement.java \
+	ast/SimpleName.java \
+	ast/SimpleType.java \
+	ast/SingleMemberAnnotation.java \
+	ast/SingleVariableDeclaration.java \
+	ast/Statement.java \
+	ast/StringLiteral.java \
+	ast/SuperConstructorInvocation.java \
+	ast/SuperFieldAccess.java \
+	ast/SuperMethodInvocation.java \
+	ast/SwitchCase.java \
+	ast/SwitchStatement.java \
+	ast/SynchronizedStatement.java \
+	ast/TagElement.java \
+	ast/TextElement.java \
+	ast/ThisExpression.java \
+	ast/ThrowStatement.java \
+	ast/TreeConverter.java \
+	ast/TreeNode.java \
+	ast/TreeUtil.java \
+	ast/TreeVisitor.java \
+	ast/TryStatement.java \
+	ast/Type.java \
+	ast/TypeDeclaration.java \
+	ast/TypeDeclarationStatement.java \
+	ast/TypeLiteral.java \
+	ast/UnionType.java \
+	ast/VariableDeclaration.java \
+	ast/VariableDeclarationExpression.java \
+	ast/VariableDeclarationFragment.java \
+	ast/VariableDeclarationStatement.java \
+	ast/WhileStatement.java \
+	gen/LiteralGenerator.java \
 	gen/MetadataGenerator.java \
 	gen/ObjectiveCHeaderGenerator.java \
 	gen/ObjectiveCImplementationGenerator.java \
@@ -61,24 +161,24 @@ JAVA_SOURCES = \
 	gen/ObjectiveCSourceFileGenerator.java \
 	gen/SourceBuilder.java \
 	gen/SourceFileGenerator.java \
-	gen/SourcePosition.java \
 	gen/StatementGenerator.java \
-	translate/ASTFactory.java \
 	translate/AnonymousClassConverter.java \
 	translate/ArrayRewriter.java \
 	translate/Autoboxer.java \
+	translate/CastResolver.java \
 	translate/ComplexExpressionExtractor.java \
 	translate/CopyAllFieldsWriter.java \
 	translate/DeadCodeEliminator.java \
 	translate/DestructorGenerator.java \
 	translate/EnhancedForRewriter.java \
+	translate/EnumRewriter.java \
 	translate/Functionizer.java \
 	translate/GwtConverter.java \
 	translate/InitializationNormalizer.java \
 	translate/InnerClassExtractor.java \
 	translate/JavaToIOSMethodTranslator.java \
-	translate/JavaToIOSTypeConverter.java \
 	translate/NilCheckResolver.java \
+	translate/OcniExtractor.java \
 	translate/OperatorRewriter.java \
 	translate/OuterReferenceFixer.java \
 	translate/OuterReferenceResolver.java \
@@ -86,10 +186,10 @@ JAVA_SOURCES = \
 	translate/StaticVarRewriter.java \
 	translate/TypeSorter.java \
 	translate/UnsequencedExpressionRewriter.java \
+	translate/VarargsRewriter.java \
+	translate/VariableRenamer.java \
 	types/AbstractBinding.java \
 	types/AbstractTypeBinding.java \
-	types/BindingMapBuilder.java \
-	types/BindingMapVerifier.java \
 	types/GeneratedMethodBinding.java \
 	types/GeneratedPackageBinding.java \
 	types/GeneratedTypeBinding.java \
@@ -102,8 +202,7 @@ JAVA_SOURCES = \
 	types/IOSParameter.java \
 	types/IOSTypeBinding.java \
 	types/JavaMethod.java \
-	types/ModifiedTypeBinding.java \
-	types/NodeCopier.java \
+	types/NullTypeBinding.java \
 	types/PointerTypeBinding.java \
 	types/RenamedTypeBinding.java \
 	types/Types.java \
@@ -168,7 +267,7 @@ clean:
 	@rm -rf $(BUILD_DIR) $(J2OBJC_JAR_DIST) $(J2OBJC_SH_DIST)
 
 test: compile-tests
-	java -classpath $(TEST_CLASSPATH) junit.textui.TestRunner com.google.devtools.j2objc.SmallTests
+	java -classpath $(TEST_CLASSPATH) -ea junit.textui.TestRunner com.google.devtools.j2objc.SmallTests
 
 compile-tests: $(J2OBJC_JAR)
 	@rm -rf $(TEST_DIR)

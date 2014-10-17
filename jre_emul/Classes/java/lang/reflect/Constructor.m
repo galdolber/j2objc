@@ -32,10 +32,10 @@
 
 @implementation JavaLangReflectConstructor
 
-+ (id)constructorWithMethodSignature:(NSMethodSignature *)methodSignature
-                            selector:(SEL)selector
-                               class:(IOSClass *)aClass
-                            metadata:(JavaMethodMetadata *)metadata {
++ (instancetype)constructorWithMethodSignature:(NSMethodSignature *)methodSignature
+                                      selector:(SEL)selector
+                                         class:(IOSClass *)aClass
+                                      metadata:(JavaMethodMetadata *)metadata {
   return [[[JavaLangReflectConstructor alloc] initWithMethodSignature:methodSignature
                                                              selector:selector
                                                                 class:aClass
@@ -57,13 +57,13 @@
   [invocation setSelector:selector_];
 
   IOSObjectArray *parameterTypes = [self getParameterTypes];
-  if ([initArgs count] != [parameterTypes count]) {
+  if (initArgs->size_ != parameterTypes->size_) {
     @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc] initWithNSString:
         @"wrong number of arguments"]);
   }
 
-  int count = [initArgs count];
-  for (int i = 0; i < count; i++) {
+  jint count = initArgs->size_;
+  for (jint i = 0; i < count; i++) {
     J2ObjcRawValue arg;
     if (![parameterTypes->buffer_[i] __unboxValue:initArgs->buffer_[i] toRawValue:&arg]) {
       @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc] initWithNSString:

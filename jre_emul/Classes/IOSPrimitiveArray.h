@@ -41,8 +41,8 @@
  * this would declare the following for IOSIntArray:
  *
  *  Constructors:
- *  + (id)newArrayWithInts:(const int *)buf count:(NSUInteger)count;
- *  + (id)arrayWithInts:(const int *)buf count:(NSUInteger)count;
+ *  + (instancetype)newArrayWithInts:(const int *)buf count:(NSUInteger)count;
+ *  + (instancetype)arrayWithInts:(const int *)buf count:(NSUInteger)count;
  *
  *  Accessors - These throw IndexOutOfBoundsException if index is out of range:
  *  FOUNDATION_EXPORT int IOSIntArray_Get(IOSIntrray *array, NSUInteger index);
@@ -58,10 +58,10 @@
  * @param C_TYPE Objective-C type for the primitive type, (e.g. "unichar")
  */
 #define PRIMITIVE_ARRAY_INTERFACE(L_NAME, U_NAME, C_TYPE) \
-+ (id)newArrayWithLength:(NSUInteger)length; \
-+ (id)arrayWithLength:(NSUInteger)length; \
-+ (id)newArrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count; \
-+ (id)arrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count; \
++ (instancetype)newArrayWithLength:(NSUInteger)length; \
++ (instancetype)arrayWithLength:(NSUInteger)length; \
++ (instancetype)newArrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count; \
++ (instancetype)arrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count; \
 FOUNDATION_EXPORT C_TYPE IOS##U_NAME##Array_Get(IOS##U_NAME##Array *array, NSUInteger index); \
 FOUNDATION_EXPORT C_TYPE *IOS##U_NAME##Array_GetRef(IOS##U_NAME##Array *array, NSUInteger index); \
 - (C_TYPE)L_NAME##AtIndex:(NSUInteger)index; \
@@ -74,10 +74,10 @@ FOUNDATION_EXPORT C_TYPE *IOS##U_NAME##Array_GetRef(IOS##U_NAME##Array *array, N
 
 @interface IOSBooleanArray : IOSArray {
  @public
-  BOOL *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jboolean buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(boolean, Boolean, BOOL)
+PRIMITIVE_ARRAY_INTERFACE(boolean, Boolean, jboolean)
 
 @end
 
@@ -86,16 +86,13 @@ PRIMITIVE_ARRAY_INTERFACE(boolean, Boolean, BOOL)
 
 @interface IOSCharArray : IOSArray {
  @public
-  unichar *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jchar buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(char, Char, unichar)
+PRIMITIVE_ARRAY_INTERFACE(char, Char, jchar)
 
 // Create an array from an NSString.
-+ (id)arrayWithNSString:(NSString *)string;
-
-// Returns a copy of the array contents.
-- (unichar *)getChars;
++ (instancetype)arrayWithNSString:(NSString *)string;
 
 @end
 
@@ -104,22 +101,22 @@ PRIMITIVE_ARRAY_INTERFACE(char, Char, unichar)
 
 @interface IOSByteArray : IOSArray {
  @public
-  char *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jbyte buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(byte, Byte, char)
+PRIMITIVE_ARRAY_INTERFACE(byte, Byte, jbyte)
 
 // Copies the array contents into a specified buffer, up to the specified
 // length.  An IndexOutOfBoundsException is thrown if the specified length
 // is greater than the array size.
-- (void)getBytes:(char *)buffer
-          offset:(NSUInteger)offset
-          length:(NSUInteger)length;
+- (void)getBytes:(jbyte *)buffer
+          offset:(jint)offset
+          length:(jint)length;
 
 // Copies the specified native buffer into this array at the specified offset.
-- (void)replaceBytes:(const char *)source
-              length:(NSUInteger)length
-              offset:(NSUInteger)destOffset;
+- (void)replaceBytes:(const jbyte *)source
+              length:(jint)length
+              offset:(jint)destOffset;
 
 // Returns the bytes of the array encapsulated in an NSData *. Copies the
 // underlying data.
@@ -132,10 +129,10 @@ PRIMITIVE_ARRAY_INTERFACE(byte, Byte, char)
 
 @interface IOSShortArray : IOSArray {
  @public
-  short *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jshort buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(short, Short, short)
+PRIMITIVE_ARRAY_INTERFACE(short, Short, jshort)
 
 @end
 
@@ -144,10 +141,10 @@ PRIMITIVE_ARRAY_INTERFACE(short, Short, short)
 
 @interface IOSIntArray : IOSArray {
  @public
-  int *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jint buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(int, Int, int)
+PRIMITIVE_ARRAY_INTERFACE(int, Int, jint)
 
 @end
 
@@ -156,10 +153,10 @@ PRIMITIVE_ARRAY_INTERFACE(int, Int, int)
 
 @interface IOSLongArray : IOSArray {
  @public
-  long long *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jlong buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(long, Long, long long)
+PRIMITIVE_ARRAY_INTERFACE(long, Long, jlong)
 
 @end
 
@@ -168,10 +165,10 @@ PRIMITIVE_ARRAY_INTERFACE(long, Long, long long)
 
 @interface IOSFloatArray : IOSArray {
  @public
-  float *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jfloat buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(float, Float, float)
+PRIMITIVE_ARRAY_INTERFACE(float, Float, jfloat)
 
 @end
 
@@ -180,10 +177,10 @@ PRIMITIVE_ARRAY_INTERFACE(float, Float, float)
 
 @interface IOSDoubleArray : IOSArray {
  @public
-  double *buffer_;  // java.nio requires this be first field in IOSArray subclasses.
+  jdouble buffer_[0];
 }
 
-PRIMITIVE_ARRAY_INTERFACE(double, Double, double)
+PRIMITIVE_ARRAY_INTERFACE(double, Double, jdouble)
 
 @end
 

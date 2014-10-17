@@ -30,15 +30,12 @@
 #import "objc/message.h"
 #import "objc/runtime.h"
 
-#define VARARGS_MODIFIER 0x80
-#define SYNTHETIC_MODIFIER 0x1000
-
 @implementation ExecutableMember
 
-- (id)initWithMethodSignature:(NSMethodSignature *)methodSignature
-                     selector:(SEL)selector
-                        class:(IOSClass *)aClass
-                     metadata:(JavaMethodMetadata *)metadata {
+- (instancetype)initWithMethodSignature:(NSMethodSignature *)methodSignature
+                               selector:(SEL)selector
+                                  class:(IOSClass *)aClass
+                               metadata:(JavaMethodMetadata *)metadata {
   if ((self = [super init])) {
     methodSignature_ = [methodSignature retain];
     selector_ = selector;
@@ -114,7 +111,7 @@ static IOSClass *ResolveParameterType(const char *objcType, NSString *paramKeywo
 
 - (IOSObjectArray *)getParameterTypes {
   // First two slots are class and SEL.
-  NSUInteger nArgs = [methodSignature_ numberOfArguments] - SKIPPED_ARGUMENTS;
+  jint nArgs = (jint)[methodSignature_ numberOfArguments] - SKIPPED_ARGUMENTS;
   IOSClass *classClass = [IOSClass classWithClass:[IOSClass class]];
   IOSObjectArray *parameters = [IOSObjectArray arrayWithLength:nArgs type:classClass];
 
@@ -135,7 +132,7 @@ static IOSClass *ResolveParameterType(const char *objcType, NSString *paramKeywo
   }
   NSArray *paramTypes = [selectorStr componentsSeparatedByString:@":"];
 
-  for (NSUInteger i = 0; i < nArgs; i++) {
+  for (jint i = 0; i < nArgs; i++) {
     const char *argType = [methodSignature_ getArgumentTypeAtIndex:i + SKIPPED_ARGUMENTS];
     IOSClass *paramType = ResolveParameterType(argType, [paramTypes objectAtIndex:i]);
     [parameters replaceObjectAtIndex:i withObject:paramType];
@@ -163,7 +160,7 @@ static IOSClass *ResolveParameterType(const char *objcType, NSString *paramKeywo
 
 - (BOOL)isSynthetic {
   if (metadata_) {
-    return ([metadata_ modifiers] & SYNTHETIC_MODIFIER) > 0;
+    return ([metadata_ modifiers] & JavaLangReflectModifier_SYNTHETIC) > 0;
   }
   return NO;
 }
@@ -220,7 +217,7 @@ static IOSClass *ResolveParameterType(const char *objcType, NSString *paramKeywo
 
 - (BOOL)isVarArgs {
   if (metadata_) {
-    return ([metadata_ modifiers] & VARARGS_MODIFIER) > 0;
+    return ([metadata_ modifiers] & JavaLangReflectModifier_VARARGS) > 0;
   }
   return NO;
 }

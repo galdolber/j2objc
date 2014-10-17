@@ -343,8 +343,8 @@ public final class Matcher implements MatchResult {
     public native String group(int group) /*-[
       [self ensureMatch];
       nil_chk(matchOffsets_);
-      NSInteger from = IOSIntArray_Get(matchOffsets_, group * 2);
-      NSInteger to = IOSIntArray_Get(matchOffsets_, (group * 2) + 1);
+      int from = IOSIntArray_Get(matchOffsets_, group * 2);
+      int to = IOSIntArray_Get(matchOffsets_, (group * 2) + 1);
       // On 64-bit systems NSNotFound gets truncated to -1 when stored in IOSIntArray.
       static const NSInteger notFound = (sizeof(int) < sizeof(NSInteger)) ? -1 : NSNotFound;
       if (from == notFound || to == notFound) {
@@ -656,7 +656,7 @@ public final class Matcher implements MatchResult {
       if (!continuing && self->transparentBounds_) {
         options |= NSMatchingWithTransparentBounds;
       }
-      NSRange range = NSMakeRange(regionStart__, regionEnd__ - regionStart__);
+      NSRange range = NSMakeRange(self->regionStart__, self->regionEnd__ - self->regionStart__);
 
       // Use enumerateMatchesInString to get progress state.
       __block BOOL matched = NO;
@@ -666,20 +666,20 @@ public final class Matcher implements MatchResult {
                            usingBlock:^(NSTextCheckingResult *match,
                                         NSMatchingFlags flags,
                                         BOOL *stop) {
-        if (match.range.location < start) {
+        if (match.range.location < (NSUInteger) start) {
           *stop = NO;
         } else {
           self->progressFlags_ = flags;
 
           // Update offsets.
-          NSUInteger nGroups = [match numberOfRanges];
-          for (NSUInteger i = 0; i < nGroups; i++) {
+          jint nGroups = (jint)[match numberOfRanges];
+          for (jint i = 0; i < nGroups; i++) {
             NSRange matchRange = [match rangeAtIndex:i];
             [self->matchOffsets_ replaceIntAtIndex:i * 2
-                                           withInt:matchRange.location];
+                                           withInt:(jint) matchRange.location];
             [self->matchOffsets_
                 replaceIntAtIndex:(i * 2) + 1
-                          withInt:matchRange.location + matchRange.length];
+                          withInt:(jint) (matchRange.location + matchRange.length)];
           }
 
           matched = [match range].length > 0;  // No match if length is zero.
@@ -692,7 +692,7 @@ public final class Matcher implements MatchResult {
 
     private native int groupCountImpl() /*-[
       NSRegularExpression *regex = (NSRegularExpression *) self->pattern__->nativePattern_;
-      return regex.numberOfCaptureGroups;
+      return (int) regex.numberOfCaptureGroups;
     ]-*/;
 
     private native boolean hitEndImpl() /*-[
@@ -710,8 +710,8 @@ public final class Matcher implements MatchResult {
           (patternFlags & NSRegularExpressionAnchorsMatchLines) > 0) {
         options |= NSMatchingWithTransparentBounds;
       }
-      NSUInteger length = regionEnd__ - regionStart__;
-      NSRange searchRange = NSMakeRange(regionStart__, length);
+      NSUInteger length = self->regionEnd__ - self->regionStart__;
+      NSRange searchRange = NSMakeRange(self->regionStart__, length);
       NSTextCheckingResult *match =
           [regex firstMatchInString:self->input_
                             options:options
@@ -721,17 +721,17 @@ public final class Matcher implements MatchResult {
       }
 
       // Update offsets.
-      NSUInteger nGroups = [match numberOfRanges];
-      for (NSUInteger i = 0; i < nGroups; i++) {
+      jint nGroups = (jint)[match numberOfRanges];
+      for (jint i = 0; i < nGroups; i++) {
         NSRange matchRange = [match rangeAtIndex:i];
         [self->matchOffsets_ replaceIntAtIndex:i * 2
-                                       withInt:matchRange.location];
+                                       withInt:(jint) matchRange.location];
         [self->matchOffsets_
             replaceIntAtIndex:(i * 2) + 1
-                      withInt:matchRange.location + matchRange.length];
+                      withInt:(jint) (matchRange.location + matchRange.length)];
       }
       NSRange range = [match range];
-      return range.location == regionStart__ && range.length == length;
+      return range.location == (NSUInteger) self->regionStart__ && range.length == length;
     ]-*/;
 
     private native boolean requireEndImpl() /*-[

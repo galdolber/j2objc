@@ -19,10 +19,13 @@ package com.google.devtools.j2objc;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.Statement;
+import com.google.devtools.j2objc.ast.TreeConverter;
+import com.google.devtools.j2objc.ast.TreeVisitor;
 import com.google.devtools.j2objc.gen.SourceBuilder;
-import com.google.devtools.j2objc.gen.SourcePosition;
 import com.google.devtools.j2objc.gen.StatementGenerator;
-import com.google.devtools.j2objc.translate.DestructorGenerator;
 import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.JdtParser;
@@ -30,12 +33,6 @@ import com.google.devtools.j2objc.util.NameTable;
 import com.google.devtools.j2objc.util.TimeTracker;
 
 import junit.framework.TestCase;
-
-import org.eclipse.jdt.core.dom.ASTVisitor;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.Statement;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -46,7 +43,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -72,7 +68,8 @@ public abstract class GenerationTest extends TestCase {
     tempDir = createTempDir();
     Options.load(new String[] {
       "-d", tempDir.getAbsolutePath(),
-      "--mem-debug" // Run tests with memory debugging by default.
+      "--mem-debug", // Run tests with memory debugging by default.
+      "--hide-private-members" // Future default, run tests with it now.
     });
     parser = initializeParser(tempDir);
   }
@@ -101,12 +98,11 @@ public abstract class GenerationTest extends TestCase {
     String source = "public class Test { void test() { " + stmts + "}}";
     CompilationUnit unit = translateType("Test", source);
     final List<Statement> statements = Lists.newArrayList();
-    unit.accept(new ASTVisitor() {
-      @SuppressWarnings("unchecked")
+    unit.accept(new TreeVisitor() {
       @Override
       public boolean visit(MethodDeclaration node) {
         if (node.getName().getIdentifier().equals("test")) {
-          statements.addAll(node.getBody().statements());
+          statements.addAll(node.getBody().getStatements());
         }
         return false;
       }
@@ -122,11 +118,12 @@ public abstract class GenerationTest extends TestCase {
    * @return the translated compilation unit
    */
   protected CompilationUnit translateType(String name, String source) {
-    CompilationUnit unit = compileType(name, source);
-    NameTable.initialize(unit);
+    org.eclipse.jdt.core.dom.CompilationUnit unit = compileType(name, source);
+    NameTable.initialize();
     Types.initialize(unit);
-    TranslationProcessor.applyMutations(unit, TimeTracker.noop());
-    return unit;
+    CompilationUnit newUnit = TreeConverter.convertCompilationUnit(unit, name + ".java", source);
+    TranslationProcessor.applyMutations(newUnit, TimeTracker.noop());
+    return newUnit;
   }
 
   /**
@@ -136,9 +133,10 @@ public abstract class GenerationTest extends TestCase {
    * @param source the source code
    * @return the parsed compilation unit
    */
-  protected CompilationUnit compileType(String name, String source) {
+  protected org.eclipse.jdt.core.dom.CompilationUnit compileType(String name, String source) {
     int errors = ErrorUtil.errorCount();
-    CompilationUnit unit = parser.parse(name, source);
+    parser.setEnableDocComments(Options.docCommentsEnabled());
+    org.eclipse.jdt.core.dom.CompilationUnit unit = parser.parse(name, source);
     assertEquals(errors, ErrorUtil.errorCount());
     return unit;
   }
@@ -162,9 +160,7 @@ public abstract class GenerationTest extends TestCase {
   }
 
   protected String generateStatement(Statement statement) {
-    return StatementGenerator.generate(statement,
-        Collections.<IVariableBinding>emptySet(), false,
-        new SourcePosition(null, SourceBuilder.BEGINNING_OF_FILE, null)).trim();
+    return StatementGenerator.generate(statement, false, SourceBuilder.BEGINNING_OF_FILE).trim();
   }
 
   /**
@@ -271,13 +267,13 @@ public abstract class GenerationTest extends TestCase {
     String source = "public class Test { " + method + " }";
     CompilationUnit unit = translateType("Test", source);
     final MethodDeclaration[] result = new MethodDeclaration[1];
-    unit.accept(new ASTVisitor() {
+    unit.accept(new TreeVisitor() {
       @Override
       public boolean visit(MethodDeclaration node) {
         String name = node.getName().getIdentifier();
-        if (name.equals(NameTable.INIT_NAME) ||
-            name.equals(DestructorGenerator.FINALIZE_METHOD) ||
-            name.equals(DestructorGenerator.DEALLOC_METHOD)) {
+        if (name.equals(NameTable.INIT_NAME)
+            || name.equals(NameTable.FINALIZE_METHOD)
+            || name.equals(NameTable.DEALLOC_METHOD)) {
           return false;
         }
         assert result[0] == null;
@@ -313,8 +309,7 @@ public abstract class GenerationTest extends TestCase {
   protected String translateSourceFile(String source, String typeName, String fileName)
       throws IOException {
     CompilationUnit unit = translateType(typeName, source);
-    String sourceName = typeName + ".java";
-    TranslationProcessor.generateObjectiveCSource(sourceName, source, unit, TimeTracker.noop());
+    TranslationProcessor.generateObjectiveCSource(unit, TimeTracker.noop());
     return getTranslatedFile(fileName);
   }
 

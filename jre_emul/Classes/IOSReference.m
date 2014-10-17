@@ -105,7 +105,7 @@ static BOOL in_low_memory_cleanup;
   [reference->referent_ autorelease];
 }
 
-+ (void)deallocReferent:(JavaLangRefReference *)reference {
++ (void)removeAssociation:(JavaLangRefReference *)reference {
   if (reference->referent_) {
     RemoveReferenceAssociation(reference->referent_, reference);
   }
@@ -173,7 +173,7 @@ static Class GetReferentSubclass(id obj) {
 // (since they are never GC'd), with this test they will do nothing in
 // iOS as well.
 static BOOL IsConstantObject(id obj) {
-  unsigned int retainCount = [obj retainCount];
+  NSUInteger retainCount = [obj retainCount];
   return retainCount == UINT_MAX || retainCount == INT_MAX;
 }
 
@@ -251,7 +251,7 @@ static BOOL RemoveAllReferenceAssociations(id referent) {
     NSSet *setCopy = (ARCBRIDGE NSSet *) set;
     for (JavaLangRefReference *reference in setCopy) {
       enqueued |= [reference enqueueInternal];
-      [reference clear];
+      reference->referent_ = nil;
     }
     CFDictionaryRemoveValue(weak_refs_map, referent);
   }

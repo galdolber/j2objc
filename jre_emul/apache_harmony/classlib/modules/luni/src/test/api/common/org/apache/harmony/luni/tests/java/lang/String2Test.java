@@ -755,7 +755,7 @@ public class String2Test extends junit.framework.TestCase {
     public void test_valueOfD() {
         // Test for method java.lang.String java.lang.String.valueOf(double)
         assertEquals("Incorrect double string returned",
-                "12345678.90123", String.valueOf(12345678.90123));
+                "1.7976931348623157E308", String.valueOf(Double.MAX_VALUE));
     }
 
     /**
@@ -763,15 +763,15 @@ public class String2Test extends junit.framework.TestCase {
      */
     public void test_valueOfF() {
         // Test for method java.lang.String java.lang.String.valueOf(float)
-	String s = String.valueOf(1.0F);
         assertTrue("incorrect float string returned--got: "
-                + s + " wanted: 1.0", Float.valueOf(s).floatValue() == 1.0F);
-        s = String.valueOf(0.9F);
+                + String.valueOf(1.0F) + " wanted: 1.0", String.valueOf(1.0F)
+                .equals("1.0"));
         assertTrue("incorrect float string returned--got: "
-                + s + " wanted: 0.9", Float.valueOf(s).floatValue() == 0.9F);
-        s = String.valueOf(109.567F);
+                + String.valueOf(0.9F) + " wanted: 0.9", String.valueOf(0.9F)
+                .equals("0.9"));
         assertTrue("incorrect float string returned--got: "
-                + s + " wanted: 109.567", Float.valueOf(s).floatValue() == 109.567F);
+                + String.valueOf(109.567F) + " wanted: 109.567", String
+                .valueOf(109.567F).equals("109.567"));
     }
 
     /**

@@ -16,7 +16,7 @@
 #
 # Author: Tom Ball
 
-.SUFFIXES: .java .m
+.SUFFIXES:
 .PHONY: default j2objc clean
 
 include environment.mk
@@ -52,6 +52,8 @@ JUNIT_PUBLIC_SOURCES = \
     org/junit/Ignore.java \
     org/junit/Rule.java \
     org/junit/Test.java \
+    org/junit/internal/JUnitSystem.java \
+    org/junit/internal/RealSystem.java \
     org/junit/internal/runners/model/ReflectiveCallable.java \
     org/junit/rules/MethodRule.java \
     org/junit/rules/RunRules.java \
@@ -75,10 +77,10 @@ JUNIT_PUBLIC_SOURCES = \
     org/junit/runner/notification/StoppedByUserException.java \
     org/junit/runners/BlockJUnit4ClassRunner.java \
     org/junit/runners/JUnit4.java \
-    org/junit/runners/ParentRunner.java \
     org/junit/runners/Suite.java \
     org/junit/runners/model/FrameworkField.java \
     org/junit/runners/model/FrameworkMember.java \
+    org/junit/runners/model/FrameworkMethod.java \
     org/junit/runners/model/InitializationError.java \
     org/junit/runners/model/MultipleFailureException.java \
     org/junit/runners/model/NoGenericTypeParametersValidator.java \
@@ -101,11 +103,9 @@ JUNIT_INTERNAL_SOURCES = \
     org/junit/internal/ComparisonCriteria.java \
     org/junit/internal/ExactComparisonCriteria.java \
     org/junit/internal/InexactComparisonCriteria.java \
-    org/junit/internal/JUnitSystem.java \
     org/junit/internal/matchers/Each.java \
     org/junit/internal/matchers/IsCollectionContaining.java \
     org/junit/internal/matchers/TypeSafeMatcher.java \
-    org/junit/internal/RealSystem.java \
     org/junit/internal/requests/ClassRequest.java \
     org/junit/internal/requests/FilterRequest.java \
     org/junit/internal/requests/SortingRequest.java \
@@ -126,8 +126,7 @@ JUNIT_INTERNAL_SOURCES = \
 
 MODIFIED_SOURCES = \
     junit/framework/TestCase.java \
-    org/junit/runners/model/FrameworkMethod.java
-
+    org/junit/runners/ParentRunner.java
 
 JUNIT_SOURCES = $(JUNIT_PUBLIC_SOURCES) $(JUNIT_INTERNAL_SOURCES)
 
@@ -183,7 +182,6 @@ TRANSLATE_ARGS = -sourcepath $(MODIFIED_JAVA_SRC_DIR):$(JAVA_SRC_DIR) \
 include ../make/translate.mk
 
 FAT_LIB_NAME = junit
-FAT_LIB_SOURCES_FULL = $(TRANSLATE_SOURCES)
 FAT_LIB_SOURCES_RELATIVE = $(TRANSLATE_SOURCES:$(GEN_OBJC_DIR)/%=%)
 FAT_LIB_SOURCE_DIRS = $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(CLANG) $(OBJCFLAGS) -I$(GEN_OBJC_DIR) -I$(ARCH_INCLUDE_DIR)

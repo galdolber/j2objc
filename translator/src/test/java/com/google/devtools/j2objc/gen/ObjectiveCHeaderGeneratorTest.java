@@ -31,15 +31,16 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
   @Override
   protected void tearDown() throws Exception {
     Options.resetDeprecatedDeclarations();
+    Options.setDocCommentsEnabled(false);
     super.tearDown();
   }
 
   public void testInnerEnumWithPackage() throws IOException {
     String translation = translateSourceFile(
-        "package mypackage;" +
-        "public class Example { MyClass myclass = new MyClass(); }" +
-        "enum Abcd { A, B, C; }" +
-        "class MyClass {}", "Example", "mypackage/Example.h");
+        "package mypackage;"
+        + "public class Example { MyClass myclass = new MyClass(); }"
+        + "enum Abcd { A, B, C; }"
+        + "class MyClass {}", "Example", "mypackage/Example.h");
     assertTranslation(translation, "@interface MypackageExample");
     assertTranslation(translation, "} MypackageAbcd;"); // enum declaration
     assertTranslation(translation, "@interface MypackageAbcdEnum");
@@ -247,7 +248,7 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
       "Example", "Example.h");
     assertTranslation(translation, "@interface Example_Inner : NSObject");
     assertNotInTranslation(translation, "Example *this");
-    assertTranslation(translation, "- (id)initWithExample:(Example *)outer$;");
+    assertTranslation(translation, "- (instancetype)initWithExample:(Example *)outer$;");
   }
 
   public void testInnerClassDeclarationWithOuterReference() throws IOException {
@@ -255,8 +256,9 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
       "public class Example { int i; class Inner { void test() { int j = i; } } }",
       "Example", "Example.h");
     assertTranslation(translation, "@interface Example_Inner : NSObject");
+    assertTranslation(translation, "- (instancetype)initWithExample:(Example *)outer$;");
+    translation = getTranslatedFile("Example.m");
     assertTranslation(translation, "Example *this$0_;");
-    assertTranslation(translation, "- (id)initWithExample:(Example *)outer$;");
   }
 
   public void testAnonymousClassDeclaration() throws IOException {
@@ -282,57 +284,58 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
     assertTranslation(translation, "@interface ColorEnum : JavaLangEnum < NSCopying > {");
     assertTranslation(translation, "+ (IOSObjectArray *)values;");
     assertTranslation(translation, "+ (ColorEnum *)valueOfWithNSString:(NSString *)name;");
-    assertTranslation(translation, "FOUNDATION_EXPORT ColorEnum *ColorEnum_values[];");
+    assertTranslation(translation, "FOUNDATION_EXPORT ColorEnum *ColorEnum_values_[];");
     assertTranslatedLines(translation,
-        "#define ColorEnum_RED ColorEnum_values[Color_RED]",
+        "#define ColorEnum_RED ColorEnum_values_[Color_RED]",
         "J2OBJC_STATIC_FIELD_GETTER(ColorEnum, RED, ColorEnum *)");
     assertTranslatedLines(translation,
-        "#define ColorEnum_WHITE ColorEnum_values[Color_WHITE]",
+        "#define ColorEnum_WHITE ColorEnum_values_[Color_WHITE]",
         "J2OBJC_STATIC_FIELD_GETTER(ColorEnum, WHITE, ColorEnum *)");
     assertTranslatedLines(translation,
-        "#define ColorEnum_BLUE ColorEnum_values[Color_BLUE]",
+        "#define ColorEnum_BLUE ColorEnum_values_[Color_BLUE]",
         "J2OBJC_STATIC_FIELD_GETTER(ColorEnum, BLUE, ColorEnum *)");
   }
 
   public void testEnumWithParameters() throws IOException {
     String translation = translateSourceFile(
-        "public enum Color { RED(0xff0000), WHITE(0xffffff), BLUE(0x0000ff); " +
-        "private int rgb; private Color(int rgb) { this.rgb = rgb; } " +
-        "public int getRgb() { return rgb; }}",
+        "public enum Color { RED(0xff0000), WHITE(0xffffff), BLUE(0x0000ff); "
+        + "private int rgb; private Color(int rgb) { this.rgb = rgb; } "
+        + "public int getRgb() { return rgb; }}",
         "Color", "Color.h");
     assertTranslation(translation, "@interface ColorEnum : JavaLangEnum");
+    translation = getTranslatedFile("Color.m");
     assertTranslation(translation, "int rgb_;");
     assertTranslatedLines(translation,
-        "- (id)initWithInt:(int)rgb",
+        "- (instancetype)initWithInt:(jint)rgb",
         "withNSString:(NSString *)__name",
-        "withInt:(int)__ordinal;");
+        "withInt:(jint)__ordinal;");
   }
 
   public void testEnumWithMultipleConstructors() throws IOException {
     String translation = translateSourceFile(
-      "public enum Color { RED(0xff0000), WHITE(0xffffff, false), BLUE(0x0000ff); " +
-      "private int rgb; private boolean primary;" +
-      "private Color(int rgb, boolean primary) { this.rgb = rgb; this.primary = primary; } " +
-      "private Color(int rgb) { this(rgb, true); } " +
-      "public int getRgb() { return rgb; }" +
-      "public boolean isPrimaryColor() { return primary; }}",
+      "public enum Color { RED(0xff0000), WHITE(0xffffff, false), BLUE(0x0000ff); "
+      + "private int rgb; private boolean primary;"
+      + "private Color(int rgb, boolean primary) { this.rgb = rgb; this.primary = primary; } "
+      + "private Color(int rgb) { this(rgb, true); } "
+      + "public int getRgb() { return rgb; }"
+      + "public boolean isPrimaryColor() { return primary; }}",
       "Color", "Color.h");
     assertTranslation(translation, "@interface ColorEnum : JavaLangEnum");
-    assertTranslation(translation, "BOOL primary_;");
-    assertTranslatedLines(translation,
-        "- (id)initWithInt:(int)rgb",
-        "withNSString:(NSString *)__name",
-        "withInt:(int)__ordinal;");
-    assertTranslatedLines(translation,
-        "- (id)initWithInt:(int)rgb",
-        "withBoolean:(BOOL)primary",
-        "withNSString:(NSString *)__name",
-        "withInt:(int)__ordinal;");
     translation = getTranslatedFile("Color.m");
+    assertTranslation(translation, "jboolean primary_;");
+    assertTranslatedLines(translation,
+        "- (instancetype)initWithInt:(jint)rgb",
+        "withNSString:(NSString *)__name",
+        "withInt:(jint)__ordinal;");
+    assertTranslatedLines(translation,
+        "- (instancetype)initWithInt:(jint)rgb",
+        "withBoolean:(jboolean)primary",
+        "withNSString:(NSString *)__name",
+        "withInt:(jint)__ordinal;");
     assertTranslation(translation,
         "[self initColorEnumWithInt:rgb withBoolean:YES withNSString:__name withInt:__ordinal]");
     assertTranslatedLines(translation,
-        "if ((self = [super initWithNSString:__name withInt:__ordinal])) {",
+        "if (self = [super initWithNSString:__name withInt:__ordinal]) {",
         "self->rgb_ = rgb;",
         "self->primary_ = primary;");
   }
@@ -355,8 +358,8 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testAnnotationGeneration() throws IOException {
     String translation = translateSourceFile(
-      "package foo; import java.lang.annotation.*; @Retention(RetentionPolicy.RUNTIME) " +
-      "public @interface Compatible { boolean fooable() default false; }",
+      "package foo; import java.lang.annotation.*; @Retention(RetentionPolicy.RUNTIME) "
+      + "public @interface Compatible { boolean fooable() default false; }",
       "Compatible", "foo/Compatible.h");
 
     // Test that the annotation was declared as a protocol and a value class.
@@ -364,44 +367,24 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
     assertTranslation(translation, "@interface FooCompatible : NSObject < FooCompatible >");
 
     // Verify that the value is defined as a property instead of a method.
-    assertTranslation(translation, "@private\n  BOOL fooable;");
-    assertTranslation(translation, "@property (readonly) BOOL fooable;");
+    assertTranslation(translation, "@private\n  jboolean fooable;");
+    assertTranslation(translation, "@property (readonly) jboolean fooable;");
 
     // Verify default value accessor is generated for property.
-    assertTranslation(translation, "+ (BOOL)fooableDefault;");
+    assertTranslation(translation, "+ (jboolean)fooableDefault;");
 
     // Check that constructor was created with the property as parameter.
-    assertTranslation(translation, "- (id)initWithFooable:(BOOL)fooable_;");
+    assertTranslation(translation, "- (instancetype)initWithFooable:(jboolean)fooable_;");
   }
 
   public void testCharacterEdgeValues() throws IOException {
     String translation = translateSourceFile(
-      "public class Test { " +
-      "  public static final char MIN = 0; " +
-      "  public static final char MAX = '\uffff'; " +
-      "}", "Test", "Test.h");
+      "public class Test { "
+      + "  public static final char MIN = 0; "
+      + "  public static final char MAX = '\uffff'; "
+      + "}", "Test", "Test.h");
     assertTranslation(translation, "x00");
     assertTranslation(translation, "0xffff");
-  }
-
-  public void testOverriddenFieldTranslation() throws IOException {
-    String translation = translateSourceFile(
-        "public class Example { int size; } " +
-        "class Subclass extends Example { int size; }" +
-        "class Subsubclass extends Subclass { int size; }",
-        "Example", "Example.h");
-    assertTranslation(translation, "int size_;");
-    assertTranslation(translation, "int size_Subclass_;");
-    assertTranslation(translation, "int size_Subsubclass_;");
-  }
-
-  public void testOverriddenNameTranslation() throws IOException {
-    String translation = translateSourceFile(
-        "public class Example { int size; int size() { return size; }} " +
-        "class Subclass extends Example { int size; int size() { return size; }}",
-        "Example", "Example.h");
-    assertTranslation(translation, "int size__;");
-    assertTranslation(translation, "int size_Subclass_;");
   }
 
   public void testEnumNaming() throws IOException {
@@ -410,15 +393,15 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
         "MyEnum", "MyEnum.h");
     assertTranslation(translation, "} MyEnum;");
     assertTranslation(translation, "@interface MyEnumEnum : JavaLangEnum");
-    assertTranslation(translation, "FOUNDATION_EXPORT MyEnumEnum *MyEnumEnum_values[];");
-    assertTranslation(translation, "#define MyEnumEnum_ONE MyEnumEnum_values[MyEnum_ONE]");
+    assertTranslation(translation, "FOUNDATION_EXPORT MyEnumEnum *MyEnumEnum_values_[];");
+    assertTranslation(translation, "#define MyEnumEnum_ONE MyEnumEnum_values_[MyEnum_ONE]");
   }
 
   public void testNoImportForMappedTypes() throws IOException {
     String translation = translateSourceFile(
-        "public class Test extends Object implements Cloneable { " +
-        "  public String toString() { return \"\"; }" +
-        "  public Class<?> myClass() { return getClass(); }}",
+        "public class Test extends Object implements Cloneable { "
+        + "  public String toString() { return \"\"; }"
+        + "  public Class<?> myClass() { return getClass(); }}",
         "Test", "Test.h");
     assertFalse(translation.contains("#include \"java/lang/Class.h\""));
     assertFalse(translation.contains("#include \"java/lang/Cloneable.h\""));
@@ -433,11 +416,11 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testAnonymousConcreteSubclassOfGenericAbstractType() throws IOException {
     String translation = translateSourceFile(
-        "public class Test {" +
-        "  interface FooInterface<T> { public void foo1(T t); public void foo2(); }" +
-        "  abstract static class Foo<T> implements FooInterface<T> { public void foo2() { } }" +
-        "  Foo<Integer> foo = new Foo<Integer>() {" +
-        "    public void foo1(Integer i) { } }; }",
+        "public class Test {"
+        + "  interface FooInterface<T> { public void foo1(T t); public void foo2(); }"
+        + "  abstract static class Foo<T> implements FooInterface<T> { public void foo2() { } }"
+        + "  Foo<Integer> foo = new Foo<Integer>() {"
+        + "    public void foo1(Integer i) { } }; }",
         "Test", "Test.h");
     assertTranslation(translation, "foo1WithId:(JavaLangInteger *)i");
   }
@@ -458,9 +441,9 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testEnumWithInterfaces() throws IOException {
     String translation = translateSourceFile(
-        "public class A { interface I {} " +
-        "enum Foo implements I, Runnable, Cloneable { " +
-        "A, B, C; public void run() {}}}", "A", "A.h");
+        "public class A { interface I {} "
+        + "enum Foo implements I, Runnable, Cloneable { "
+        + "A, B, C; public void run() {}}}", "A", "A.h");
     assertTranslation(translation,
         "@interface A_FooEnum : JavaLangEnum < NSCopying, A_I, JavaLangRunnable >");
     assertTranslation(translation, "#include \"java/lang/Runnable.h\"");
@@ -468,8 +451,8 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testExternalNativeMethod() throws IOException {
     String translation = translateSourceFile(
-        "package foo; class Example { native void external(String s); " +
-        "  void test(String str) { external(str); }}", "Example", "foo/Example.h");
+        "package foo; class Example { native void external(String s); "
+        + "  void test(String str) { external(str); }}", "Example", "foo/Example.h");
 
     // Verify test() is in main interface.
     assertTranslation(translation,
@@ -497,7 +480,7 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
         + "  private class Internal {"
         + "  }"
         + "}";
-    String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.h");
+    String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.m");
     assertTranslatedLines(translation,
         "__weak FooBar_Internal *fieldBar_;",
         "FooBar_Internal *fieldFoo_;");
@@ -507,7 +490,7 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
       throws IOException {
     Options.enableDeprecatedDeclarations();
 
-    String sourceContent = "";
+    String sourceContent = "class Test {}";
     String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.h");
 
     assertTranslation(translation, "#pragma clang diagnostic push");
@@ -517,7 +500,7 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testDoNotAddIgnoreDeprecationWarningsPragmaIfDeprecatedDeclarationsIsDisabled()
       throws IOException {
-    String sourceContent = "";
+    String sourceContent = "class Test {}";
     String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.h");
 
     assertNotInTranslation(translation, "#pragma clang diagnostic push");
@@ -527,9 +510,9 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
   }
 
   public void testInnerAnnotationGeneration() throws IOException {
-    String source = "import java.lang.annotation.*; public abstract class Test { " +
-        "@Retention(RetentionPolicy.RUNTIME) @Target(ElementType.METHOD) " +
-        "public @interface Initialize {}}";
+    String source = "import java.lang.annotation.*; public abstract class Test { "
+        + "@Retention(RetentionPolicy.RUNTIME) @Target(ElementType.METHOD) "
+        + "public @interface Initialize {}}";
     String translation = translateSourceFile(source, "Test", "Test.h");
     assertTranslation(translation, "@protocol Test_Initialize < JavaLangAnnotationAnnotation >");
     assertTranslation(translation, "@interface Test_Initialize : NSObject < Test_Initialize >");
@@ -537,8 +520,8 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testFieldSetterGeneration() throws IOException {
     String translation = translateSourceFile(
-        "import com.google.j2objc.annotations.Weak;" +
-        "class Test { Object o; @Weak String s; static Integer i; }", "Test", "Test.h");
+        "import com.google.j2objc.annotations.Weak;"
+        + "class Test { Object o; @Weak String s; static Integer i; }", "Test", "Test.h");
     assertTranslation(translation, "J2OBJC_FIELD_SETTER(Test, o_, id)");
     // Make sure the @Weak and static fields don't generate setters.
     assertOccurrences(translation, "J2OBJC_FIELD_SETTER", 1);
@@ -546,19 +529,20 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
 
   public void testEnumWithNameAndOrdinalParameters() throws IOException {
     String translation = translateSourceFile(
-      "public enum Test { FOO(\"foo\", 3), BAR(\"bar\", 5); " +
-      "private String name; private int ordinal; " +
-      "private Test(String name, int ordinal) { this.name = name; this.ordinal = ordinal; }" +
-      "public String getName() { return name; }}",
+      "public enum Test { FOO(\"foo\", 3), BAR(\"bar\", 5); "
+      + "private String name; private int ordinal; "
+      + "private Test(String name, int ordinal) { this.name = name; this.ordinal = ordinal; }"
+      + "public String getName() { return name; }}",
       "Test", "Test.h");
     assertTranslation(translation, "@interface TestEnum : JavaLangEnum");
+    translation = getTranslatedFile("Test.m");
     assertTranslation(translation, "NSString *name_Test_;");
     assertTranslation(translation, "int ordinal_Test_;");
     assertTranslatedLines(translation,
-        "- (id)initWithNSString:(NSString *)name",
-        "withInt:(int)ordinal",
+        "- (instancetype)initWithNSString:(NSString *)name",
+        "withInt:(jint)ordinal",
         "withNSString:(NSString *)__name",
-        "withInt:(int)__ordinal;");
+        "withInt:(jint)__ordinal;");
   }
 
   public void testDeprecatedEnumType() throws IOException {
@@ -572,5 +556,24 @@ public class ObjectiveCHeaderGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { static final long FOO = 123; }", "Test", "Test.h");
     assertTranslation(translation, "123LL");
+  }
+
+  public void testDocComments() throws IOException {
+    Options.setDocCommentsEnabled(true);
+    String translation = translateSourceFile(
+        "/** Class javadoc for {@link Test}. */ class Test { \n"
+        + "/** Field javadoc. */\n"
+        + "int i;"
+        + "/** Method javadoc.\n"
+        + "  * @param foo Unused.\n"
+        + "  * @return always false.\n"
+        + "  */\n"
+        + "boolean test(int foo) { return false; } }", "Test", "Test.h");
+    assertTranslation(translation, "@brief Class javadoc for Test .");
+    assertTranslation(translation, "@brief Field javadoc.");
+    assertTranslatedLines(translation,
+        "@brief Method javadoc.",
+        "@param foo Unused.",
+        "@return always false.");
   }
 }

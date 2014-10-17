@@ -15,11 +15,13 @@
 # Author: Keith Stanger
 # TODO(kstanger): Build a fat library to distribute.
 
+SUFFIXES:
+
 default: dist
 
 include environment.mk
 
-JAVA_SOURCES = \
+JAVA_SOURCES := \
     $(filter-out $(SOURCES_TO_EXCLUDE:%=$(SRC_DIR)/%),$(shell find $(SRC_DIR) -name *.java))
 
 JAVA_SOURCES_MANIFEST = $(BUILD_DIR)/java_sources.mf
@@ -36,11 +38,11 @@ J2OBJCC = $(ARCH_BIN_DIR)/j2objcc -c -fobjc-abi-version=2 -fobjc-legacy-dispatch
 TRANSLATE_JAVA_FULL = $(JAVA_SOURCES)
 TRANSLATE_JAVA_RELATIVE = $(JAVA_SOURCES:$(SRC_DIR)/%=%)
 TRANSLATE_ARGS = --segmented-headers --extract-unsequenced --batch-translate-max=300 \
-    -cp $(CLASSPATH) -sourcepath $(SOURCEPATH) -encoding UTF-8 -J-Xmx2G
+    -cp $(CLASSPATH) -sourcepath $(SOURCEPATH) -encoding UTF-8 -J-Xmx2G \
+    --hide-private-members --final-methods-as-functions
 include ../make/translate.mk
 
 FAT_LIB_NAME = guava
-FAT_LIB_SOURCES_FULL = $(TRANSLATE_SOURCES)
 FAT_LIB_SOURCES_RELATIVE = $(TRANSLATE_SOURCES:$(GEN_OBJC_DIR)/%=%)
 FAT_LIB_SOURCE_DIRS = $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(J2OBJCC)

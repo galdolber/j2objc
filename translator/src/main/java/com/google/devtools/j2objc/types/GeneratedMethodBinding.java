@@ -18,6 +18,7 @@ package com.google.devtools.j2objc.types;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.devtools.j2objc.util.BindingUtil;
 import com.google.devtools.j2objc.util.NameTable;
 
 import org.eclipse.jdt.core.dom.IAnnotationBinding;
@@ -37,7 +38,7 @@ import java.util.List;
 public class GeneratedMethodBinding extends AbstractBinding implements IMethodBinding {
   private final IMethodBinding delegate;
   private final String name;
-  private final int modifiers;
+  private int modifiers;
   private final List<ITypeBinding> parameters = Lists.newArrayList();
   private final ITypeBinding returnType;
   private final IMethodBinding methodDeclaration;
@@ -45,22 +46,18 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
   private final boolean varargs;
   private final boolean isConstructor;
 
-  // TODO(tball): remove isSynthetic flag and constructor parameter, and use a modifier instead.
-  private final boolean isSynthetic;
-
   public GeneratedMethodBinding(
       IMethodBinding delegate, String name, int modifiers, ITypeBinding returnType,
       IMethodBinding methodDeclaration, ITypeBinding declaringClass, boolean isConstructor,
       boolean varargs, boolean isSynthetic) {
     this.delegate = delegate;
     this.name = Preconditions.checkNotNull(name);
-    this.modifiers = modifiers;
+    this.modifiers = isSynthetic ? modifiers | BindingUtil.ACC_SYNTHETIC : modifiers;
     this.returnType = returnType;
     this.methodDeclaration = methodDeclaration;
     this.declaringClass = declaringClass;
     this.isConstructor = isConstructor;
     this.varargs = varargs;
-    this.isSynthetic = isSynthetic;
   }
 
   /**
@@ -103,7 +100,7 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
 
   @Override
   public boolean isSynthetic() {
-    return isSynthetic || (modifiers & 0x1000) > 0;  // Modifier.SYNTHETIC.
+    return BindingUtil.isSynthetic(this);
   }
 
   @Override
@@ -184,7 +181,7 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
 
   @Override
   public ITypeBinding[] getTypeParameters() {
-    throw new AssertionError("not implemented");
+    return new ITypeBinding[0];
   }
 
   @Override
@@ -230,6 +227,10 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
   @Override
   public boolean overrides(IMethodBinding method) {
     return delegate != null && (delegate.equals(method) || delegate.overrides(method));
+  }
+
+  public void setModifiers(int modifiers) {
+    this.modifiers = modifiers;
   }
 
   @Override

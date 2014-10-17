@@ -19,7 +19,6 @@ package com.google.devtools.j2objc.util;
 import org.eclipse.jdt.core.dom.ASTNode;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
-import org.eclipse.jdt.core.dom.PackageDeclaration;
 
 import java.util.Stack;
 
@@ -56,11 +55,6 @@ public class ErrorReportingASTVisitor extends ASTVisitor {
   public void postVisit(ASTNode node) {
     assert stack.peek() == node;
     stack.pop();
-  }
-
-  @Override
-  public boolean visit(PackageDeclaration node) {
-    return false;
   }
 
   @Override

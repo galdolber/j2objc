@@ -15,24 +15,28 @@
 package com.google.devtools.j2objc;
 
 import com.google.common.collect.Sets;
-import com.google.common.io.Files;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.TreeConverter;
 import com.google.devtools.j2objc.gen.ObjectiveCHeaderGenerator;
 import com.google.devtools.j2objc.gen.ObjectiveCImplementationGenerator;
 import com.google.devtools.j2objc.gen.ObjectiveCSegmentedHeaderGenerator;
 import com.google.devtools.j2objc.translate.AnonymousClassConverter;
 import com.google.devtools.j2objc.translate.ArrayRewriter;
 import com.google.devtools.j2objc.translate.Autoboxer;
+import com.google.devtools.j2objc.translate.CastResolver;
 import com.google.devtools.j2objc.translate.ComplexExpressionExtractor;
+import com.google.devtools.j2objc.translate.ConstantBranchPruner;
 import com.google.devtools.j2objc.translate.CopyAllFieldsWriter;
 import com.google.devtools.j2objc.translate.DestructorGenerator;
 import com.google.devtools.j2objc.translate.EnhancedForRewriter;
+import com.google.devtools.j2objc.translate.EnumRewriter;
 import com.google.devtools.j2objc.translate.Functionizer;
 import com.google.devtools.j2objc.translate.GwtConverter;
 import com.google.devtools.j2objc.translate.InitializationNormalizer;
 import com.google.devtools.j2objc.translate.InnerClassExtractor;
 import com.google.devtools.j2objc.translate.JavaToIOSMethodTranslator;
-import com.google.devtools.j2objc.translate.JavaToIOSTypeConverter;
 import com.google.devtools.j2objc.translate.NilCheckResolver;
+import com.google.devtools.j2objc.translate.OcniExtractor;
 import com.google.devtools.j2objc.translate.OperatorRewriter;
 import com.google.devtools.j2objc.translate.OuterReferenceFixer;
 import com.google.devtools.j2objc.translate.OuterReferenceResolver;
@@ -40,21 +44,17 @@ import com.google.devtools.j2objc.translate.Rewriter;
 import com.google.devtools.j2objc.translate.StaticVarRewriter;
 import com.google.devtools.j2objc.translate.TypeSorter;
 import com.google.devtools.j2objc.translate.UnsequencedExpressionRewriter;
+import com.google.devtools.j2objc.translate.VarargsRewriter;
+import com.google.devtools.j2objc.translate.VariableRenamer;
 import com.google.devtools.j2objc.types.HeaderImportCollector;
 import com.google.devtools.j2objc.types.IOSTypeBinding;
 import com.google.devtools.j2objc.types.ImplementationImportCollector;
 import com.google.devtools.j2objc.types.Import;
-import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.JdtParser;
 import com.google.devtools.j2objc.util.TimeTracker;
 
-import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ITypeBinding;
-import org.eclipse.jface.text.BadLocationException;
-import org.eclipse.jface.text.Document;
-import org.eclipse.text.edits.MalformedTreeException;
-import org.eclipse.text.edits.TextEdit;
 
 import java.io.File;
 import java.io.FileReader;
@@ -113,33 +113,31 @@ class TranslationProcessor extends FileProcessor {
   }
 
   @Override
-  protected void processUnit(String path, String source, CompilationUnit unit, TimeTracker ticker) {
+  protected void processUnit(
+      String path, String source, org.eclipse.jdt.core.dom.CompilationUnit unit,
+      TimeTracker ticker) {
     String relativePath = getRelativePath(path, unit);
     processedFiles.add(relativePath);
     seenFiles.add(relativePath);
 
-    // Needed for saving converted sources.
-    unit.recordModifications();
-    applyMutations(unit, ticker);
+    CompilationUnit newUnit = TreeConverter.convertCompilationUnit(unit, path, source);
+
+    applyMutations(newUnit, ticker);
     ticker.tick("Tree mutations");
 
-    if (unit.types().isEmpty()) {
+    if (unit.types().isEmpty() && !newUnit.getMainTypeName().endsWith("package_info")) {
       logger.finest("skipping dead file " + path);
       return;
     }
 
-    if (Options.printConvertedSources()) {
-      saveConvertedSource(path, source, unit);
-    }
-
     logger.finest("writing output file(s) to " + Options.getOutputDirectory().getAbsolutePath());
 
-    generateObjectiveCSource(path, source, unit, ticker);
+    generateObjectiveCSource(newUnit, ticker);
     ticker.tick("Source generation");
 
     if (Options.buildClosure()) {
       // Add out-of-date dependencies to translation list.
-      checkDependencies(path, unit);
+      checkDependencies(newUnit);
     }
 
     OuterReferenceResolver.cleanup();
@@ -167,19 +165,22 @@ class TranslationProcessor extends FileProcessor {
     new Rewriter().run(unit);
     ticker.tick("Rewriter");
 
+    new VariableRenamer().run(unit);
+    ticker.tick("VariableRenamer");
+
     // Rewrite enhanced for loops into correct C code.
     new EnhancedForRewriter().run(unit);
     ticker.tick("EnhancedForRewriter");
 
     // Add auto-boxing conversions.
-    new Autoboxer(unit.getAST()).run(unit);
+    new Autoboxer().run(unit);
     ticker.tick("Autoboxer");
 
     // Extract inner and anonymous classes
-    new AnonymousClassConverter(unit).run(unit);
+    new AnonymousClassConverter().run(unit);
     ticker.tick("AnonymousClassConverter");
     new InnerClassExtractor(unit).run(unit);
-    ticker.tick("InnerClassConverter");
+    ticker.tick("InnerClassExtractor");
 
     // Normalize init statements
     new InitializationNormalizer().run(unit);
@@ -195,30 +196,14 @@ class TranslationProcessor extends FileProcessor {
       ticker.tick("UnsequencedExpressionRewriter");
     }
 
-    // Breaks up deeply nested expressions such as chained method calls.
-    new ComplexExpressionExtractor().run(unit);
-    ticker.tick("ComplexExpressionExtractor");
-
     // Adds nil_chk calls wherever an expression is dereferenced.
     new NilCheckResolver().run(unit);
     ticker.tick("NilCheckResolver");
 
-    // Translate core Java type use to similar iOS types
-    new JavaToIOSTypeConverter().run(unit);
-    ticker.tick("JavaToIOSTypeConverter");
-    Map<String, String> methodMappings = Options.getMethodMappings();
-    if (methodMappings.isEmpty()) {
-      // Method maps are loaded here so tests can call translate() directly.
-      loadMappingFiles();
-    }
-    new JavaToIOSMethodTranslator(unit.getAST(), methodMappings).run(unit);
-    ticker.tick("JavaToIOSMethodTranslator");
-
-    new ArrayRewriter().run(unit);
-    ticker.tick("ArrayRewriter");
-
-    new StaticVarRewriter().run(unit);
-    ticker.tick("StaticVarRewriter");
+    // Before: ArrayRewriter - Adds ArrayCreation nodes.
+    // Before: Functionizer - Can't rewrite function arguments.
+    new VarargsRewriter().run(unit);
+    ticker.tick("VarargsRewriter");
 
     // Reorders the types so that superclasses are declared before classes that
     // extend them.
@@ -234,38 +219,78 @@ class TranslationProcessor extends FileProcessor {
     new CopyAllFieldsWriter().run(unit);
     ticker.tick("CopyAllFieldsWriter");
 
-    new OperatorRewriter().run(unit);
-    ticker.tick("OperatorRewriter");
+    new ConstantBranchPruner().run(unit);
+    ticker.tick("ConstantBranchPruner");
 
+    new OcniExtractor(unit).run(unit);
+    ticker.tick("OcniExtractor");
+
+    // After: OcniExtractor - So that native methods can be correctly
+    //   functionized.
     if (Options.finalMethodsAsFunctions()) {
       new Functionizer().run(unit);
       ticker.tick("Functionizer");
     }
 
+    // After: Functionizer - Changes bindings on MethodDeclaration nodes.
+    // Before: StaticVarRewriter, OperatorRewriter - Doesn't know how to handle
+    //   the hasRetainedResult flag on ClassInstanceCreation nodes.
+    Map<String, String> methodMappings = Options.getMethodMappings();
+    if (methodMappings.isEmpty()) {
+      // Method maps are loaded here so tests can call translate() directly.
+      loadMappingFiles();
+    }
+    new JavaToIOSMethodTranslator(methodMappings).run(unit);
+    ticker.tick("JavaToIOSMethodTranslator");
+
+    new StaticVarRewriter().run(unit);
+    ticker.tick("StaticVarRewriter");
+
+    new OperatorRewriter().run(unit);
+    ticker.tick("OperatorRewriter");
+
+    // After: StaticVarRewriter, OperatorRewriter - They set the
+    //   hasRetainedResult on ArrayCreation nodes.
+    new ArrayRewriter().run(unit);
+    ticker.tick("ArrayRewriter");
+
+    new EnumRewriter().run(unit);
+    ticker.tick("EnumRewriter");
+
+    // Breaks up deeply nested expressions such as chained method calls.
+    // Should be one of the last translations because other mutations will
+    // affect how deep the expressions are.
+    new ComplexExpressionExtractor().run(unit);
+    ticker.tick("ComplexExpressionExtractor");
+
+    // Should be one of the last translations because methods and functions
+    // added in other phases may need added casts.
+    new CastResolver().run(unit);
+    ticker.tick("CastResolver");
+
     for (Plugin plugin : Options.getPlugins()) {
       plugin.processUnit(unit);
     }
 
-    // Verify all modified nodes have type bindings
-    Types.verifyNode(unit);
+    // Make sure we still have a valid AST.
+    unit.validate();
 
     ticker.pop();
   }
 
-  public static void generateObjectiveCSource(
-      String path, String source, CompilationUnit unit, TimeTracker ticker) {
+  public static void generateObjectiveCSource(CompilationUnit unit, TimeTracker ticker) {
     ticker.push();
 
     // write header
     if (Options.generateSegmentedHeaders()) {
-      ObjectiveCSegmentedHeaderGenerator.generate(path, source, unit);
+      ObjectiveCSegmentedHeaderGenerator.generate(unit);
     } else {
-      ObjectiveCHeaderGenerator.generate(path, source, unit);
+      ObjectiveCHeaderGenerator.generate(unit);
     }
     ticker.tick("Header generation");
 
     // write implementation file
-    ObjectiveCImplementationGenerator.generate(path, unit, source);
+    ObjectiveCImplementationGenerator.generate(unit);
     ticker.tick("Implementation generation");
 
     ticker.pop();
@@ -288,11 +313,11 @@ class TranslationProcessor extends FileProcessor {
     }
   }
 
-  private void checkDependencies(String sourceFile, CompilationUnit unit) {
+  private void checkDependencies(CompilationUnit unit) {
     HeaderImportCollector hdrCollector = new HeaderImportCollector();
     hdrCollector.collect(unit);
     ImplementationImportCollector implCollector = new ImplementationImportCollector();
-    implCollector.collect(unit, sourceFile);
+    implCollector.collect(unit);
     Set<Import> imports = hdrCollector.getForwardDeclarations();
     imports.addAll(hdrCollector.getSuperTypes());
     imports.addAll(implCollector.getImports());
@@ -305,17 +330,33 @@ class TranslationProcessor extends FileProcessor {
     if (type instanceof IOSTypeBinding) {
       return;  // Ignore core types.
     }
-    String sourceName = type.getErasure().getQualifiedName().replace('.', '/') + ".java";
+    String typeName = type.getErasure().getQualifiedName();
+    String sourceName = typeName.replace('.', File.separatorChar) + ".java";
     if (seenFiles.contains(sourceName)) {
       return;
     }
     seenFiles.add(sourceName);
 
     // Check if source file exists.
+    String originalTypeName = typeName;
     File sourceFile = findSourceFile(sourceName);
-    if (sourceFile == null) {
-      ErrorUtil.warning("could not find source path for " + sourceName);
-      return;
+    while (sourceFile == null && !sourceName.isEmpty()) {
+      // Check if class exists on classpath.
+      if (findClassFile(typeName)) {
+        logger.finest("no source for " + typeName + ", class found");
+        return;
+      }
+      int iDot = typeName.lastIndexOf('.');
+      if (iDot == -1) {
+        ErrorUtil.warning("could not find source path for " + originalTypeName);
+        return;
+      }
+      typeName = typeName.substring(0, iDot);
+      sourceName = typeName.replace('.', File.pathSeparatorChar) + ".java";
+      if (seenFiles.contains(sourceName)) {
+        return;
+      }
+      sourceFile = findSourceFile(sourceName);
     }
 
     // Check if the source file is older than the generated header file.
@@ -328,46 +369,56 @@ class TranslationProcessor extends FileProcessor {
 
   private File findSourceFile(String path) {
     for (String sourcePath : Options.getSourcePathEntries()) {
-      File f = new File(sourcePath);
-      if (f.isDirectory()) {
-        File source = new File(f, path);
-        if (source.exists()) {
-          return source;
-        }
-      } else if (f.isFile() && sourcePath.endsWith(".jar")) {
-        try {
-          ZipFile zfile = new ZipFile(f);
-          try {
-            ZipEntry entry = zfile.getEntry(path);
-            if (entry != null) {
-              return f;
-            }
-          } finally {
-            zfile.close();
-          }
-        } catch (IOException e) {
-          ErrorUtil.warning(e.getMessage());
-        }
+      File f = findFile(path, sourcePath);
+      if (f != null) {
+        return f;
       }
     }
     return null;
   }
 
-  private void saveConvertedSource(String filename, String source, CompilationUnit unit) {
-    try {
-      Document doc = new Document(source);
-      TextEdit edit = unit.rewrite(doc, null);
-      edit.apply(doc);
-      File outputFile = new File(Options.getOutputDirectory(), filename);
-      outputFile.getParentFile().mkdirs();
-      Files.write(doc.get(), outputFile, Options.getCharset());
-    } catch (MalformedTreeException e) {
-      throw new AssertionError(e);
-    } catch (BadLocationException e) {
-      throw new AssertionError(e);
-    } catch (IOException e) {
-      ErrorUtil.error(e.getMessage());
+  private boolean findClassFile(String typeName) {
+    // Zip/jar files always use forward slashes.
+    String path = typeName.replace('.', '/') + ".class";
+    for (String classPath : Options.getClassPathEntries()) {
+      File f = findFile(path, classPath);
+      if (f != null) {
+        return true;
+      }
     }
+    // See if it's a JRE class.
+    try {
+      Class.forName(typeName);
+      return true;
+    } catch (ClassNotFoundException e) {
+      // Fall-through.
+    }
+    return false;
+  }
+
+  private File findFile(String path, String sourcePath) {
+    File f = new File(sourcePath);
+    if (f.isDirectory()) {
+      File source = new File(f, path);
+      if (source.exists()) {
+        return source;
+      }
+    } else if (f.isFile() && sourcePath.endsWith(".jar")) {
+      try {
+        ZipFile zfile = new ZipFile(f);
+        try {
+          ZipEntry entry = zfile.getEntry(path);
+          if (entry != null) {
+            return f;
+          }
+        } finally {
+          zfile.close();
+        }
+      } catch (IOException e) {
+        ErrorUtil.warning(e.getMessage());
+      }
+    }
+    return null;
   }
 
   private static void loadMappingFiles() {

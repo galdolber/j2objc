@@ -16,14 +16,11 @@ package com.google.devtools.j2objc.util;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.google.devtools.j2objc.types.IOSMethodBinding;
-import com.google.devtools.j2objc.types.Types;
 import com.google.j2objc.annotations.Weak;
 import com.google.j2objc.annotations.WeakOuter;
 
 import org.eclipse.jdt.core.dom.IAnnotationBinding;
 import org.eclipse.jdt.core.dom.IBinding;
-import org.eclipse.jdt.core.dom.IExtendedModifier;
 import org.eclipse.jdt.core.dom.IMemberValuePairBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -43,6 +40,14 @@ import java.util.Set;
  * @author Keith Stanger
  */
 public final class BindingUtil {
+
+  // Flags defined in JVM spec, table 4.1. These constants are also defined in
+  // java.lang.reflect.Modifier, but aren't public.
+  public static final int ACC_BRIDGE = 0x40;
+  public static final int ACC_VARARGS = 0x80;
+  public static final int ACC_SYNTHETIC = 0x1000;
+  public static final int ACC_ANNOTATION = 0x2000;
+  public static final int ACC_ENUM = 0x4000;
 
   public static boolean isStatic(IBinding binding) {
     return Modifier.isStatic(binding.getModifiers());
@@ -75,6 +80,53 @@ public final class BindingUtil {
 
   public static boolean isSynchronized(IBinding binding) {
     return Modifier.isSynchronized(binding.getModifiers());
+  }
+
+  public static boolean isSynthetic(int modifiers) {
+    return (modifiers & ACC_SYNTHETIC) > 0;
+  }
+
+  public static boolean isSynthetic(IMethodBinding m) {
+    return isSynthetic(m.getModifiers());
+  }
+
+  public static boolean isInitializeMethod(IMethodBinding m) {
+    return isStatic(m) && NameTable.CLINIT_NAME.equals(m.getName())
+        && m.getParameterTypes().length == 0 && isSynthetic(m);
+  }
+
+  /**
+   * Determines if a type can access fields and methods from an outer class.
+   */
+  public static boolean hasOuterContext(ITypeBinding type) {
+    if (type.getDeclaringClass() == null) {
+      return false;
+    }
+    // Local types can't be declared static, but if the declaring method is
+    // static then the local type is effectively static.
+    IMethodBinding declaringMethod = type.getTypeDeclaration().getDeclaringMethod();
+    if (declaringMethod != null) {
+      return !BindingUtil.isStatic(declaringMethod);
+    }
+    return !BindingUtil.isStatic(type);
+  }
+
+  /**
+   * Convert an IBinding to a ITypeBinding. Returns null if the binding cannot
+   * be converted to a type binding.
+   */
+  public static ITypeBinding toTypeBinding(IBinding binding) {
+    if (binding instanceof ITypeBinding) {
+      return (ITypeBinding) binding;
+    } else if (binding instanceof IMethodBinding) {
+      IMethodBinding m = (IMethodBinding) binding;
+      return m.isConstructor() ? m.getDeclaringClass() : m.getReturnType();
+    } else if (binding instanceof IVariableBinding) {
+      return ((IVariableBinding) binding).getType();
+    } else if (binding instanceof IAnnotationBinding) {
+      return ((IAnnotationBinding) binding).getAnnotationType();
+    }
+    return null;
   }
 
   /**
@@ -251,10 +303,6 @@ public final class BindingUtil {
    * Returns true if the specified binding is of an annotation that has
    * a runtime retention policy.
    */
-  public static boolean isRuntimeAnnotation(IExtendedModifier mod) {
-    return mod.isAnnotation() ? isRuntimeAnnotation(Types.getTypeBinding(mod)) : false;
-  }
-
   public static boolean isRuntimeAnnotation(IAnnotationBinding binding) {
     return isRuntimeAnnotation(binding.getAnnotationType());
   }
@@ -312,9 +360,11 @@ public final class BindingUtil {
   }
 
   /**
-   * Returns true if method is a C function.
+   * Returns true if method is an Objective-C dealloc method.
    */
-  public static boolean isFunction(IMethodBinding m) {
-    return m instanceof IOSMethodBinding && IOSMethodBinding.getIOSMethod(m).isFunction();
+  public static boolean isDestructor(IMethodBinding m) {
+    String methodName = NameTable.getName(m);
+    return methodName.equals(NameTable.FINALIZE_METHOD)
+        || methodName.equals(NameTable.DEALLOC_METHOD);
   }
 }

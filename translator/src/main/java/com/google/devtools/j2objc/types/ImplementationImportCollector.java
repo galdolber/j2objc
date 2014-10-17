@@ -17,49 +17,51 @@
 package com.google.devtools.j2objc.types;
 
 import com.google.common.collect.Sets;
-import com.google.devtools.j2objc.util.ASTUtil;
+import com.google.devtools.j2objc.ast.Annotation;
+import com.google.devtools.j2objc.ast.AnnotationTypeDeclaration;
+import com.google.devtools.j2objc.ast.AnnotationTypeMemberDeclaration;
+import com.google.devtools.j2objc.ast.Assignment;
+import com.google.devtools.j2objc.ast.Assignment.Operator;
+import com.google.devtools.j2objc.ast.CastExpression;
+import com.google.devtools.j2objc.ast.CatchClause;
+import com.google.devtools.j2objc.ast.ClassInstanceCreation;
+import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.EnumDeclaration;
+import com.google.devtools.j2objc.ast.Expression;
+import com.google.devtools.j2objc.ast.FieldAccess;
+import com.google.devtools.j2objc.ast.FieldDeclaration;
+import com.google.devtools.j2objc.ast.FunctionInvocation;
+import com.google.devtools.j2objc.ast.InstanceofExpression;
+import com.google.devtools.j2objc.ast.MarkerAnnotation;
+import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.MethodInvocation;
+import com.google.devtools.j2objc.ast.Name;
+import com.google.devtools.j2objc.ast.NormalAnnotation;
+import com.google.devtools.j2objc.ast.QualifiedName;
+import com.google.devtools.j2objc.ast.SimpleName;
+import com.google.devtools.j2objc.ast.SingleMemberAnnotation;
+import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
+import com.google.devtools.j2objc.ast.TreeUtil;
+import com.google.devtools.j2objc.ast.TreeVisitor;
+import com.google.devtools.j2objc.ast.TryStatement;
+import com.google.devtools.j2objc.ast.Type;
+import com.google.devtools.j2objc.ast.TypeDeclaration;
+import com.google.devtools.j2objc.ast.TypeLiteral;
+import com.google.devtools.j2objc.ast.UnionType;
+import com.google.devtools.j2objc.ast.VariableDeclarationExpression;
+import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
 import com.google.devtools.j2objc.util.BindingUtil;
-import com.google.devtools.j2objc.util.ErrorReportingASTVisitor;
 import com.google.devtools.j2objc.util.NameTable;
 
-import org.eclipse.jdt.core.dom.Annotation;
-import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration;
-import org.eclipse.jdt.core.dom.AnnotationTypeMemberDeclaration;
-import org.eclipse.jdt.core.dom.Assignment;
-import org.eclipse.jdt.core.dom.Assignment.Operator;
-import org.eclipse.jdt.core.dom.CastExpression;
-import org.eclipse.jdt.core.dom.CatchClause;
-import org.eclipse.jdt.core.dom.ClassInstanceCreation;
-import org.eclipse.jdt.core.dom.CompilationUnit;
-import org.eclipse.jdt.core.dom.EnumDeclaration;
-import org.eclipse.jdt.core.dom.Expression;
-import org.eclipse.jdt.core.dom.FieldAccess;
-import org.eclipse.jdt.core.dom.FieldDeclaration;
 import org.eclipse.jdt.core.dom.IAnnotationBinding;
 import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMemberValuePairBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
-import org.eclipse.jdt.core.dom.InfixExpression;
-import org.eclipse.jdt.core.dom.InstanceofExpression;
-import org.eclipse.jdt.core.dom.MarkerAnnotation;
-import org.eclipse.jdt.core.dom.MethodDeclaration;
-import org.eclipse.jdt.core.dom.MethodInvocation;
 import org.eclipse.jdt.core.dom.Modifier;
-import org.eclipse.jdt.core.dom.Name;
-import org.eclipse.jdt.core.dom.NormalAnnotation;
-import org.eclipse.jdt.core.dom.QualifiedName;
-import org.eclipse.jdt.core.dom.SimpleName;
-import org.eclipse.jdt.core.dom.SingleMemberAnnotation;
-import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
-import org.eclipse.jdt.core.dom.TryStatement;
-import org.eclipse.jdt.core.dom.Type;
-import org.eclipse.jdt.core.dom.TypeDeclaration;
-import org.eclipse.jdt.core.dom.TypeLiteral;
-import org.eclipse.jdt.core.dom.VariableDeclarationExpression;
-import org.eclipse.jdt.core.dom.VariableDeclarationStatement;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -68,14 +70,14 @@ import java.util.Set;
  *
  * @author Tom Ball
  */
-public class ImplementationImportCollector extends ErrorReportingASTVisitor {
+public class ImplementationImportCollector extends TreeVisitor {
 
   private String mainTypeName;
   private Set<Import> imports = Sets.newLinkedHashSet();
   private Set<Import> declaredTypes = Sets.newHashSet();
 
-  public void collect(CompilationUnit unit, String sourceFileName) {
-    mainTypeName = NameTable.getMainTypeName(unit, sourceFileName);
+  public void collect(CompilationUnit unit) {
+    mainTypeName = NameTable.getMainTypeFullName(unit);
     run(unit);
     for (Import imp : declaredTypes) {
       imports.remove(imp);
@@ -87,8 +89,12 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   }
 
   private void addImports(Type type) {
-    if (type != null) {
-      addImports(Types.getTypeBinding(type));
+    if (type instanceof UnionType) {
+      for (Type t : ((UnionType) type).getTypes()) {
+        addImports(t);
+      }
+    } else if (type != null) {
+      addImports(type.getTypeBinding());
     }
   }
 
@@ -108,7 +114,7 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(AnnotationTypeDeclaration node) {
-    ITypeBinding type = Types.getTypeBinding(node);
+    ITypeBinding type = node.getTypeBinding();
     addImports(type);
     addDeclaredType(type, false);
     addImports(Types.resolveIOSType("IOSClass"));
@@ -123,12 +129,12 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(Assignment node) {
-    if (node.getOperator() == Operator.PLUS_ASSIGN &&
-        Types.isJavaStringType(Types.getTypeBinding(node.getLeftHandSide())) &&
-        Types.isBooleanType(Types.getTypeBinding(node.getRightHandSide()))) {
+    if (node.getOperator() == Operator.PLUS_ASSIGN
+        && Types.isJavaStringType(node.getLeftHandSide().getTypeBinding())
+        && Types.isBooleanType(node.getRightHandSide().getTypeBinding())) {
       // Implicit conversion from boolean -> String translates into a
       // Boolean.toString(...) call, so add a reference to java.lang.Boolean.
-      addImports(node.getAST().resolveWellKnownType("java.lang.Boolean"));
+      addImports(Types.resolveJavaType("java.lang.Boolean"));
     }
     return true;
   }
@@ -148,10 +154,11 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   @Override
   public boolean visit(ClassInstanceCreation node) {
     addImports(node.getType());
-    IMethodBinding binding = Types.getMethodBinding(node);
+    IMethodBinding binding = node.getMethodBinding();
     if (binding != null) {
       ITypeBinding[] parameterTypes = binding.getParameterTypes();
-      for (int i = 0; i < node.arguments().size(); i++) {
+      List<Expression> arguments = node.getArguments();
+      for (int i = 0; i < arguments.size(); i++) {
 
         ITypeBinding parameterType;
         if (i < parameterTypes.length) {
@@ -159,9 +166,9 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
         } else {
           parameterType = parameterTypes[parameterTypes.length - 1];
         }
-        ITypeBinding actualType = Types.getTypeBinding(node.arguments().get(i));
-        if (!parameterType.equals(actualType) &&
-            actualType.isAssignmentCompatible(parameterType)) {
+        ITypeBinding actualType = arguments.get(i).getTypeBinding();
+        if (!parameterType.equals(actualType)
+            && actualType.isAssignmentCompatible(parameterType)) {
           addImports(actualType);
         } else {
           addImports(parameterType);
@@ -172,28 +179,8 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   }
 
   @Override
-  public boolean visit(TryStatement node) {
-    if (ASTUtil.getResources(node).size() > 0) {
-      addImports(Types.mapTypeName("java.lang.Throwable"));
-    }
-    return true;
-  }
-
-  @Override
-  public boolean visit(TypeLiteral node) {
-    ITypeBinding type = Types.getTypeBinding(node.getType());
-    if (type.isPrimitive()) {
-      addImports(Types.getWrapperType(type));
-    } else {
-      addImports(type);
-      addImports(Types.resolveIOSType("IOSClass"));
-    }
-    return false;
-  }
-
-  @Override
   public boolean visit(EnumDeclaration node) {
-    ITypeBinding type = Types.getTypeBinding(node);
+    ITypeBinding type = node.getTypeBinding();
     addImports(type);
     addDeclaredType(type, true);
     addImports(Types.resolveIOSType("IOSClass"));
@@ -204,7 +191,7 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(FieldAccess node) {
-    addImports(Types.getTypeBinding(node.getName()));
+    addImports(node.getName().getTypeBinding());
     return true;
   }
 
@@ -215,33 +202,15 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   }
 
   @Override
-  public boolean visit(InstanceofExpression node) {
-    addImports(Types.getTypeBinding(node.getRightOperand()));
-    return true;
+  public void endVisit(FunctionInvocation node) {
+    // The return type is needed because the expression might need a cast.
+    addImports(node.getTypeBinding());
+    addImports(node.getDeclaringType());
   }
 
   @Override
-  public boolean visit(InfixExpression node) {
-    if (Types.isJavaStringType(Types.getTypeBinding(node))) {
-      boolean needsImport = false;
-      if (Types.isBooleanType(Types.getTypeBinding(node.getLeftOperand())) ||
-          Types.isBooleanType(Types.getTypeBinding(node.getRightOperand()))) {
-        needsImport = true;
-      } else {
-        for (Expression extendedExpression : ASTUtil.getExtendedOperands(node)) {
-          if (Types.isBooleanType(Types.getTypeBinding(extendedExpression))) {
-            needsImport = true;
-            break;
-          }
-        }
-      }
-
-      if (needsImport) {
-        // Implicit conversion from boolean -> String translates into a
-        // Boolean.toString(...) call, so add a reference to java.lang.Boolean.
-        addImports(node.getAST().resolveWellKnownType("java.lang.Boolean"));
-      }
-    }
+  public boolean visit(InstanceofExpression node) {
+    addImports(node.getRightOperand().getTypeBinding());
     return true;
   }
 
@@ -252,8 +221,8 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(MethodDeclaration node) {
-    addImports(node.getReturnType2());
-    IMethodBinding binding = Types.getMethodBinding(node);
+    addImports(node.getReturnType());
+    IMethodBinding binding = node.getMethodBinding();
     for (ITypeBinding exceptionType : binding.getExceptionTypes()) {
       addImports(exceptionType);
       addImports(Types.resolveIOSType("IOSClass"));
@@ -263,10 +232,9 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(MethodInvocation node) {
-    IMethodBinding methodBinding = Types.getMethodBinding(node);
-    addImports(methodBinding.getReturnType());
+    IMethodBinding binding = node.getMethodBinding();
+    addImports(binding.getReturnType());
     // Check for vararg method
-    IMethodBinding binding = Types.getMethodBinding(node);
     if (binding != null) {
       ITypeBinding[] parameterTypes = binding.getParameterTypes();
       int nParameters = parameterTypes.length;
@@ -276,11 +244,12 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
         addImports(parameterTypes[nParameters - 1]);
         --nParameters;
       }
+      List<Expression> arguments = node.getArguments();
       for (int i = 0; i < nParameters; i++) {
         ITypeBinding parameterType = parameterTypes[i];
-        ITypeBinding actualType = Types.getTypeBinding(node.arguments().get(i));
-        if (!parameterType.equals(actualType) &&
-            actualType.isAssignmentCompatible(parameterType)) {
+        ITypeBinding actualType = arguments.get(i).getTypeBinding();
+        if (!parameterType.equals(actualType)
+            && actualType.isAssignmentCompatible(parameterType)) {
           addImports(actualType);
         }
       }
@@ -296,22 +265,10 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
         }
       }
     } else {
-      IMethodBinding receiver = Types.getMethodBinding(expr);
-      if (receiver != null && !receiver.isConstructor()) {
-        addImports(receiver.getReturnType());
-      }
-      if (receiver == null) {
-        // Check for class variable or enum constant.
-        IVariableBinding var = Types.getVariableBinding(expr);
-        if (var == null || var.isEnumConstant()) {
-          addImports(Types.getTypeBinding(expr));
-        } else {
-          addImports(var.getType());
-        }
-      }
+      addImports(expr.getTypeBinding());
     }
     while (expr != null && expr instanceof Name) {
-      ITypeBinding typeBinding = Types.getTypeBinding(expr);
+      ITypeBinding typeBinding = expr.getTypeBinding();
       if (typeBinding != null && typeBinding.isClass()) { // if class literal
         addImports(typeBinding);
         break;
@@ -326,13 +283,22 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   }
 
   @Override
+  public boolean visit(FunctionInvocation node) {
+    for (Expression arg : node.getArguments()) {
+      addImports(arg.getTypeBinding());
+    }
+    addImports(node.getDeclaredReturnType());
+    return true;
+  }
+
+  @Override
   public boolean visit(NormalAnnotation node) {
     return visitAnnotation(node);
   }
 
   @Override
   public boolean visit(QualifiedName node) {
-    IBinding type = Types.getTypeBinding(node);
+    IBinding type = node.getTypeBinding();
     if (type != null) {
       addImports((ITypeBinding) type);
     }
@@ -341,12 +307,12 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SimpleName node) {
-    IVariableBinding var = Types.getVariableBinding(node);
+    IVariableBinding var = TreeUtil.getVariableBinding(node);
     if (var != null && Modifier.isStatic(var.getModifiers())) {
       ITypeBinding declaringClass = var.getDeclaringClass();
       addImports(declaringClass);
     }
-    ITypeBinding type = Types.getTypeBinding(node);
+    ITypeBinding type = node.getTypeBinding();
     if (BindingUtil.isRuntimeAnnotation(type)) {
       addImports(type);
       addImports(Types.resolveIOSType("IOSClass"));
@@ -361,16 +327,36 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
 
   @Override
   public boolean visit(SingleVariableDeclaration node) {
-    addImports(Types.getTypeBinding(node));
+    addImports(node.getVariableBinding().getType());
+    return true;
+  }
+
+  @Override
+  public boolean visit(TryStatement node) {
+    if (node.getResources().size() > 0) {
+      addImports(Types.mapTypeName("java.lang.Throwable"));
+    }
     return true;
   }
 
   @Override
   public boolean visit(TypeDeclaration node) {
-    ITypeBinding type = Types.getTypeBinding(node);
+    ITypeBinding type = node.getTypeBinding();
     addImports(type);
     addDeclaredType(type, false);
     return true;
+  }
+
+  @Override
+  public boolean visit(TypeLiteral node) {
+    ITypeBinding type = node.getType().getTypeBinding();
+    if (type.isPrimitive()) {
+      addImports(Types.getWrapperType(type));
+    } else {
+      addImports(type);
+      addImports(Types.resolveIOSType("IOSClass"));
+    }
+    return false;
   }
 
   @Override
@@ -387,7 +373,7 @@ public class ImplementationImportCollector extends ErrorReportingASTVisitor {
   }
 
   private boolean visitAnnotation(Annotation node) {
-    IAnnotationBinding binding = Types.getAnnotationBinding(node);
+    IAnnotationBinding binding = node.getAnnotationBinding();
     if (!BindingUtil.isRuntimeAnnotation(binding)) {
       return false;
     }

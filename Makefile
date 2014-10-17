@@ -17,6 +17,7 @@
 #
 # Author: Tom Ball
 
+SUFFIXES:
 .PHONY: translator dist test
 
 default: dist
@@ -40,7 +41,6 @@ install-man-pages: $(MAN_PAGES)
 
 dist: translator_dist jre_emul_dist  install-man-pages
 
-
 clean:
 	@rm -rf $(DIST_DIR)
 	@cd annotations && $(MAKE) clean
@@ -49,6 +49,7 @@ clean:
 	@cd jre_emul && $(MAKE) clean
 	@cd junit && $(MAKE) clean
 	@cd jsr305 && $(MAKE) clean
+	@cd inject/javax_inject && $(MAKE) clean
 	@cd guava && $(MAKE) clean
 	@cd testing/mockito && $(MAKE) clean
 	@cd cycle_finder && $(MAKE) clean

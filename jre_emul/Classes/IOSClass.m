@@ -80,7 +80,7 @@ static IOSClass *FetchArray(IOSClass *componentType);
 // Package to prefix mappings, initialized in FindMappedClass().
 static JavaUtilProperties *prefixMapping;
 
-- (id)init {
+- (instancetype)init {
   if ((self = [super init])) {
     JreMemDebugAdd(self);
   }
@@ -304,14 +304,14 @@ static NSString *GetParameterKeyword(IOSClass *paramType) {
 // and "nameWithType:withType:..." for multiple parameters.
 NSString *IOSClass_GetTranslatedMethodName(NSString *name, IOSObjectArray *parameterTypes) {
   nil_chk(name);
-  NSUInteger nParameters = [parameterTypes count];
+  jint nParameters = parameterTypes ? parameterTypes->size_ : 0;
   if (nParameters == 0) {
     return name;
   }
   IOSClass *firstParameterType = parameterTypes->buffer_[0];
   NSMutableString *translatedName = [NSMutableString stringWithCapacity:128];
   [translatedName appendFormat:@"%@With%@:", name, GetParameterKeyword(firstParameterType)];
-  for (NSUInteger i = 1; i < nParameters; i++) {
+  for (jint i = 1; i < nParameters; i++) {
     IOSClass *parameterType = parameterTypes->buffer_[i];
     [translatedName appendFormat:@"with%@:", GetParameterKeyword(parameterType)];
   }
@@ -349,8 +349,7 @@ NSString *IOSClass_GetTranslatedMethodName(NSString *name, IOSObjectArray *param
 
 - (NSString *)binaryName {
   NSString *name = [self getName];
-  return [NSString stringWithFormat:@"L%@;",
-          [name stringByReplacingOccurrencesOfString:@"." withString:@"/"]];
+  return [NSString stringWithFormat:@"L%@;", name];
 }
 
 // Convert Java class name to camelcased iOS name.
@@ -364,14 +363,14 @@ static NSString *IOSClass_JavaToIOSName(NSString *javaName) {
   if ([parts count] == 1) {
     [iosName appendString:[parts objectAtIndex:0]];
   } else {
+    id lastPart = [parts lastObject];
     for (NSString *part in parts) {
-      [iosName appendString:Capitalize(part)];
+      if (part != lastPart) {
+        part = Capitalize(part);
+      }
+      [iosName appendString:part];
     }
   }
-  [iosName replaceOccurrencesOfString:@"$"
-                           withString:@"_"
-                              options:0
-                                range:NSMakeRange(0, [iosName length])];
   return iosName;
 }
 
@@ -417,6 +416,7 @@ static IOSClass *FindMappedClass(NSString *name) {
   }
   NSString *mappedName =
       [prefix stringByAppendingString:[name substringFromIndex:lastDot.location + 1]];
+  mappedName = [mappedName stringByReplacingOccurrencesOfString:@"$" withString:@"_"];
   return ClassForIosName(mappedName);
 }
 
@@ -426,6 +426,10 @@ static IOSClass *FindMappedClass(NSString *name) {
 
 static IOSClass *ClassForJavaName(NSString *name) {
   IOSClass *cls = ClassForIosName(IOSClass_JavaToIOSName(name));
+  if (!cls && [name indexOf:'$'] >= 0) {
+    name = [name stringByReplacingOccurrencesOfString:@"$" withString:@"_"];
+    cls = ClassForIosName(IOSClass_JavaToIOSName(name));
+  }
   if (!cls) {
     cls = FindMappedClass(name);
   }
@@ -479,7 +483,7 @@ static IOSClass *IOSClass_ArrayClassForName(NSString *name, NSUInteger index) {
   return nil;
 }
 
-+ (IOSClass *)forName:(NSString *)className {
+IOSClass *IOSClass_forNameWithNSString_(NSString *className) {
   nil_chk(className);
   IOSClass *iosClass = nil;
   if ([className length] > 0) {
@@ -499,10 +503,19 @@ static IOSClass *IOSClass_ArrayClassForName(NSString *name, NSUInteger index) {
   @throw AUTORELEASE([[JavaLangClassNotFoundException alloc] initWithNSString:className]);
 }
 
++ (IOSClass *)forName:(NSString *)className {
+  return IOSClass_forNameWithNSString_(className);
+}
+
+IOSClass *IOSClass_forNameWithNSString_withBoolean_withJavaLangClassLoader_(
+    NSString *className, BOOL load, JavaLangClassLoader *loader) {
+  return IOSClass_forNameWithNSString_(className);
+}
+
 + (IOSClass *)forName:(NSString *)className
            initialize:(BOOL)load
-          classLoader:(id)loader {
-  return [IOSClass forName:className];
+          classLoader:(JavaLangClassLoader *)loader {
+  return IOSClass_forNameWithNSString_withBoolean_withJavaLangClassLoader_(className, load, loader);
 }
 
 - (id)cast:(id)throwable {
@@ -584,8 +597,8 @@ static BOOL hasModifier(IOSClass *cls, int flag) {
 - (id)getAnnotationWithIOSClass:(IOSClass *)annotationClass {
   nil_chk(annotationClass);
   IOSObjectArray *annotations = [self getAnnotations];
-  NSUInteger n = [annotations count];
-  for (NSUInteger i = 0; i < n; i++) {
+  jint n = annotations->size_;
+  for (jint i = 0; i < n; i++) {
     id annotation = annotations->buffer_[i];
     if ([annotationClass isInstance:annotation]) {
       return annotation;
@@ -601,7 +614,7 @@ static BOOL hasModifier(IOSClass *cls, int flag) {
 - (IOSObjectArray *)getAnnotations {
   NSMutableArray *array = [[NSMutableArray alloc] init];
   IOSObjectArray *declared = [self getDeclaredAnnotations];
-  for (NSUInteger i = 0; i < [declared count]; i++) {
+  for (jint i = 0; i < declared->size_; i++) {
     [array addObject:declared->buffer_[i]];
   }
 
@@ -610,10 +623,10 @@ static BOOL hasModifier(IOSClass *cls, int flag) {
   IOSClass *inheritedAnnotation = [JavaLangAnnotationInherited getClass];
   while (cls) {
     IOSObjectArray *declared = [cls getDeclaredAnnotations];
-    for (NSUInteger i = 0; i < [declared count]; i++) {
+    for (jint i = 0; i < declared->size_; i++) {
       id<JavaLangAnnotationAnnotation> annotation = declared->buffer_[i];
       IOSObjectArray *attributes = [[annotation getClass] getDeclaredAnnotations];
-      for (NSUInteger j = 0; j < [attributes count]; j++) {
+      for (jint j = 0; j < attributes->size_; j++) {
         id<JavaLangAnnotationAnnotation> attribute = attributes->buffer_[j];
         if (inheritedAnnotation == [attribute getClass]) {
           [array addObject:annotation];
@@ -698,7 +711,7 @@ static void GetFieldsFromClass(IOSClass *iosClass, NSMutableDictionary *fields) 
   JavaClassMetadata *metadata = [iosClass getMetadata];
   if (metadata) {
     IOSObjectArray *infos = [metadata allFields];
-    for (unsigned i = 0; i < infos->size_; i++) {
+    for (jint i = 0; i < infos->size_; i++) {
       JavaFieldMetadata *fieldMeta = [infos objectAtIndex:i];
       Ivar ivar = class_getInstanceVariable(iosClass.objcClass, [[fieldMeta iosName] UTF8String]);
       JavaLangReflectField *field = [JavaLangReflectField fieldWithIvar:ivar
@@ -773,11 +786,11 @@ static void GetFieldsFromClass(IOSClass *iosClass, NSMutableDictionary *fields) 
 }
 
 IOSObjectArray *copyFieldsToObjectArray(NSArray *fields) {
-  NSUInteger count = [fields count];
+  jint count = (jint)[fields count];
   IOSClass *fieldType = [IOSClass classWithClass:[JavaLangReflectField class]];
   IOSObjectArray *results = [IOSObjectArray arrayWithLength:count
                                                        type:fieldType];
-  for (NSUInteger i = 0; i < count; i++) {
+  for (jint i = 0; i < count; i++) {
     [results replaceObjectAtIndex:i withObject:[fields objectAtIndex:i]];
   }
   return results;
@@ -855,7 +868,7 @@ IOSObjectArray *copyFieldsToObjectArray(NSArray *fields) {
 
 // Implementing NSCopying allows IOSClass objects to be used as keys in the
 // class cache.
-- (id)copyWithZone:(NSZone *)zone {
+- (instancetype)copyWithZone:(NSZone *)zone {
   return self;
 }
 
@@ -926,31 +939,6 @@ IOSClass *FetchArray(IOSClass *componentType) {
   return iosClass;
 }
 
-+ (void)load {
-  // Force JRE categories to be loaded.
-  id objectCategoryLoader = [[JreObjectCategoryDummy alloc] init];
-  id stringCategoryLoader = [[JreStringCategoryDummy alloc] init];
-  id numberCategoryLoader = [[JreNumberCategoryDummy alloc] init];
-
-  // Check that categories successfully loaded.
-  if ([[NSObject class] instanceMethodSignatureForSelector:@selector(compareToWithId:)] == NULL ||
-      [[NSString class] instanceMethodSignatureForSelector:@selector(trim)] == NULL ||
-      ![NSNumber conformsToProtocol:@protocol(JavaIoSerializable)]) {
-    [NSException raise:@"J2ObjCLinkError"
-                format:@"Your project is not configured to load categories from the JRE "
-                        "emulation library. Try adding the -force_load linker flag."];
-  }
-
-#if __has_feature(objc_arc)
-  // Avoid "unused local variable" warnings.
-  numberCategoryLoader = objectCategoryLoader = stringCategoryLoader = nil;
-#else
-  [numberCategoryLoader release];
-  [objectCategoryLoader release];
-  [stringCategoryLoader release];
-#endif
-}
-
 + (void)initialize {
   if (self == [IOSClass class]) {
     // Explicitly mapped classes are defined in Types.initializeTypeMap().
@@ -975,6 +963,20 @@ IOSClass *FetchArray(IOSClass *componentType) {
 
     IOSClass_objectClass = FetchClass([NSObject class]);
     IOSClass_stringClass = FetchClass([NSString class]);
+
+    // Load and initialize JRE categories, using their dummy classes.
+    AUTORELEASE([[JreObjectCategoryDummy alloc] init]);
+    AUTORELEASE([[JreStringCategoryDummy alloc] init]);
+    AUTORELEASE([[JreNumberCategoryDummy alloc] init]);
+
+    // Verify that these categories successfully loaded.
+    if ([[NSObject class] instanceMethodSignatureForSelector:@selector(compareToWithId:)] == NULL ||
+        [[NSString class] instanceMethodSignatureForSelector:@selector(trim)] == NULL ||
+        ![NSNumber conformsToProtocol:@protocol(JavaIoSerializable)]) {
+      [NSException raise:@"J2ObjCLinkError"
+                  format:@"Your project is not configured to load categories from the JRE "
+                          "emulation library. Try adding the -force_load linker flag."];
+    }
   }
 }
 

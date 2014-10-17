@@ -20,7 +20,7 @@
 
 @implementation NSDictionaryMap_Entry
 
-- (id)initWithDictionary:(NSMutableDictionary *)dictionary key:(id)key {
+- (instancetype)initWithDictionary:(NSMutableDictionary *)dictionary key:(id)key {
   if ((self = [super init])) {
     dictionary_ = RETAIN_(dictionary);
     key_ = RETAIN_(key);
@@ -54,14 +54,14 @@
 
 @implementation NSDictionaryMap
 
-- (id)init {
+- (instancetype)init {
   if ((self = [super init])) {
     dictionary_ = [NSMutableDictionary dictionary];
   }
   return self;
 }
 
-+ (NSDictionaryMap *)map {
++ (instancetype)map {
   return AUTORELEASE([[[self class] alloc] init]);
 }
 
@@ -72,14 +72,14 @@
 }
 #endif
 
-- (id)initWithDictionary:(NSDictionary *)dictionary {
+- (instancetype)initWithDictionary:(NSDictionary *)dictionary {
   if ((self = [super init])) {
     dictionary_ = [nil_chk(dictionary) mutableCopy];
   }
   return self;
 }
 
-+ (NSDictionaryMap *)mapWithDictionary:(NSDictionary *)dictionary {
++ (instancetype)mapWithDictionary:(NSDictionary *)dictionary {
   return AUTORELEASE([[[self class] alloc] initWithDictionary:dictionary]);
 }
 
@@ -87,11 +87,11 @@
   [dictionary_ removeAllObjects];
 }
 
-- (BOOL)containsKeyWithId:(id)key {
+- (jboolean)containsKeyWithId:(id)key {
   return [dictionary_ objectForKey:key] != nil;
 }
 
-- (BOOL)containsValueWithId:(id)value {
+- (jboolean)containsValueWithId:(id)value {
   return [[dictionary_ allValues] containsObject:value];
 }
 
@@ -107,7 +107,7 @@
   return set;
 }
 
-- (BOOL)isEqual:(id)object {
+- (jboolean)isEqual:(id)object {
   if (!object) {
     return NO;
   }
@@ -133,7 +133,7 @@
   return [dictionary_ hash];
 }
 
-- (BOOL)isEmpty {
+- (jboolean)isEmpty {
   return [dictionary_ count] == 0;
 }
 
@@ -168,7 +168,7 @@
 }
 
 - (int)size {
-  return [dictionary_ count];
+  return (int) [dictionary_ count];
 }
 
 - (id<JavaUtilCollection>)values {

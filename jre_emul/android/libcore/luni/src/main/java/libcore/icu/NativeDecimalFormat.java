@@ -31,6 +31,7 @@ import java.util.NoSuchElementException;
 
 /*-[
 #import "java/lang/Double.h"
+#import "java/lang/Integer.h"
 #import "java/lang/Long.h"
 ]-*/
 
@@ -272,23 +273,23 @@ public final class NativeDecimalFormat implements Cloneable {
     // start getter and setter
 
     public native int getMaximumFractionDigits() /*-[
-      return [(NSNumberFormatter *) nsFormatter_ maximumFractionDigits];
+      return (int) [(NSNumberFormatter *) nsFormatter_ maximumFractionDigits];
     ]-*/;
 
     public native int getMaximumIntegerDigits() /*-[
-      return [(NSNumberFormatter *) nsFormatter_ maximumIntegerDigits];
+      return (int) [(NSNumberFormatter *) nsFormatter_ maximumIntegerDigits];
     ]-*/;
 
     public native int getMinimumFractionDigits() /*-[
-      return [(NSNumberFormatter *) nsFormatter_ minimumFractionDigits];
+      return (int) [(NSNumberFormatter *) nsFormatter_ minimumFractionDigits];
     ]-*/;
 
     public native int getMinimumIntegerDigits() /*-[
-      return [(NSNumberFormatter *) nsFormatter_ minimumIntegerDigits];
+      return (int) [(NSNumberFormatter *) nsFormatter_ minimumIntegerDigits];
     ]-*/;
 
     public native int getGroupingSize() /*-[
-      return [(NSNumberFormatter *) nsFormatter_ groupingSize];
+      return (int) [(NSNumberFormatter *) nsFormatter_ groupingSize];
     ]-*/;
 
     public native int getMultiplier() /*-[
@@ -668,13 +669,31 @@ public final class NativeDecimalFormat implements Cloneable {
       NSNumber *result;
       int start = [position getIndex];
       NSRange range = NSMakeRange(start, [string length] - start);
+
+      // iOS bug: numbers that are zero digits only (like "0000") fail to parse
+      // when allowsFloats is false, so parse that case separately.
+      if (range.length > 0 && [formatter allowsFloats] == NO &&
+          [string characterAtIndex:start] == '0') {
+        BOOL onlyZeroes = YES;
+        for (NSUInteger i = start + 1; i < range.length + start; i++) {
+          if ([string characterAtIndex:i] != '0') {
+            onlyZeroes = NO;
+            break;
+          }
+        }
+        if (onlyZeroes) {
+          [position setIndexWithInt:start + (int) range.length];
+          return [JavaLangInteger valueOfWithInt:0];
+        }
+      }
+
       NSError *error;
       BOOL success = [formatter getObjectValue:&result
                                      forString:string
                                          range:&range
                                          error:&error];
       if (success) {
-        [position setIndexWithInt:start + range.length];
+        [position setIndexWithInt:start + (int) range.length];
         NSString *decimalSeparator = [formatter decimalSeparator];
         if ([string rangeOfString:decimalSeparator].location == NSNotFound) {
           return [JavaLangLong valueOfWithLong:[result longLongValue]];

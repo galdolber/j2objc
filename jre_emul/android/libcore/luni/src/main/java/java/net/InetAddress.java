@@ -362,7 +362,18 @@ public class InetAddress implements Serializable {
      */
     public static InetAddress getLocalHost() throws UnknownHostException {
         String host = Libcore.os.uname().nodename;
-        return lookupHostByName(host)[0];
+        try {
+          return lookupHostByName(host)[0];
+        } catch (UnknownHostException e) {
+          try {
+            // iOS devices don't map the hostname to an ip.
+            InetAddress[] result = lookupHostByName("127.0.0.1");
+            addressCache.put(host, result);
+            return result[0];
+          } catch (UnknownHostException e2) {
+            throw e;
+          }
+        }
     }
 
     /**
@@ -767,7 +778,7 @@ public class InetAddress implements Serializable {
         return getByAddress(hostName, ipAddress, 0);
     }
 
-    private static InetAddress getByAddress(String hostName, byte[] ipAddress, int scopeId) throws UnknownHostException {
+    public static InetAddress getByAddress(String hostName, byte[] ipAddress, int scopeId) throws UnknownHostException {
         if (ipAddress == null) {
             throw new UnknownHostException("ipAddress == null");
         }
@@ -851,5 +862,9 @@ public class InetAddress implements Serializable {
      */
     private Object readResolve() throws ObjectStreamException {
         return new Inet4Address(ipaddress, hostName);
+    }
+
+    public int getFamily() {
+      return family;
     }
 }

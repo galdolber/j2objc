@@ -17,6 +17,18 @@
 
 #import <Foundation/Foundation.h>
 
+// Typedefs for each of Java's primitive types. (as defined in jni.h)
+// jboolean and jbyte are modified from jni.h to integrate better with
+// Objective-C code.
+typedef BOOL            jboolean;
+typedef char            jbyte;          /* signed 8 bits */
+typedef uint16_t        jchar;          /* unsigned 16 bits */
+typedef int16_t         jshort;         /* signed 16 bits */
+typedef int32_t         jint;           /* signed 32 bits */
+typedef int64_t         jlong;          /* signed 64 bits */
+typedef float           jfloat;         /* 32-bit IEEE 754 */
+typedef double          jdouble;        /* 64-bit IEEE 754 */
+
 /*!
  * Defines an init function for a class that will ensure that the class is
  * initialized. For class "Foo" the function will have the following signature:
@@ -85,7 +97,11 @@
 #define J2OBJC_STATIC_FIELD_SETTER(CLASS, FIELD, TYPE) \
   __attribute__((always_inline)) inline TYPE CLASS##_set_##FIELD(TYPE value) { \
     CLASS##_init(); \
-    return JreOperatorRetainedAssign(&CLASS##_##FIELD, nil, value); \
+    return JreStrongAssign(&CLASS##_##FIELD, nil, value); \
+  } \
+  __attribute__((always_inline)) inline TYPE CLASS##_setAndConsume_##FIELD(TYPE value) { \
+    CLASS##_init(); \
+    return JreStrongAssignAndConsume(&CLASS##_##FIELD, nil, value); \
   }
 #endif
 
@@ -100,5 +116,25 @@
   - (id)retain { return self; } \
   - (oneway void)release {} \
   - (id)autorelease { return self; }
+
+/*!
+ * Returns correct result when casting a double to an integral type. In C, a
+ * float >= Integer.MAX_VALUE (allowing for rounding) returns 0x80000000,
+ * while Java requires 0x7FFFFFFF.  A double >= Long.MAX_VALUE returns
+ * 0x8000000000000000L, while Java requires 0x7FFFFFFFFFFFFFFFL.
+ */
+__attribute__((always_inline)) inline int J2ObjCFpToInt(double d) {
+  int tmp = (int) d;
+  return tmp == (int) 0x80000000 ? (d >= 0 ? 0x7FFFFFFF : tmp) : tmp;
+}
+__attribute__((always_inline)) inline long long J2ObjCFpToLong(double d) {
+  long long tmp = (long long) d;
+  return (unsigned long long) tmp == 0x8000000000000000LL ?
+      (d >= 0 ? 0x7FFFFFFFFFFFFFFFL : tmp) : tmp;
+}
+__attribute__((always_inline)) inline unichar J2ObjCFpToUnichar(double d) {
+  unsigned tmp = (unsigned) d;
+  return tmp > 0xFFFF || (tmp == 0 && d > 0) ? 0xFFFF : (unichar) tmp;
+}
 
 #endif // _J2OBJC_COMMON_H_

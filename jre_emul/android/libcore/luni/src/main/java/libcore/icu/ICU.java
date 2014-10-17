@@ -146,7 +146,7 @@ public final class ICU {
       [languages getObjects:(__unsafe_unretained id *) data.mutableBytes range:range];
       IOSObjectArray * result =
           [IOSObjectArray arrayWithObjects:(__unsafe_unretained id *) data.mutableBytes
-                                     count:count
+                                     count:(jint)count
                                       type:[NSString getClass]];
       return result;
     ]-*/;
@@ -159,14 +159,20 @@ public final class ICU {
       [countries getObjects:(__unsafe_unretained id *) data.mutableBytes range:range];
       IOSObjectArray * result =
           [IOSObjectArray arrayWithObjects:(__unsafe_unretained id *) data.mutableBytes
-                                     count:count
+                                     count:(jint)count
                                       type:[NSString getClass]];
       return result;
     ]-*/;
 
-    private static native String[] getAvailableBreakIteratorLocalesNative();
+    private static native String[] getAvailableBreakIteratorLocalesNative() /*-[
+      // Foundation framework doesn't support break iterators.
+      return [IOSObjectArray arrayWithLength:0 type:[NSString getClass]];
+    ]-*/;
 
-    private static native String[] getAvailableCollatorLocalesNative();
+    private static native String[] getAvailableCollatorLocalesNative() /*-[
+      // Foundation framework doesn't support collators.
+      return [IOSObjectArray arrayWithLength:0 type:[NSString getClass]];
+    ]-*/;
 
     private static native String[] getAvailableLocalesNative() /*-[
       NSArray *localeIds = [NSLocale availableLocaleIdentifiers];
@@ -281,6 +287,6 @@ public final class ICU {
     public static native int getCurrencyFractionDigits(String currencyCode) /*-[
       NSNumberFormatter *formatter = AUTORELEASE([[NSNumberFormatter alloc] init]);
       [formatter setCurrencyCode:currencyCode];
-      return [formatter maximumFractionDigits];
+      return (int) [formatter maximumFractionDigits];
     ]-*/;
 }

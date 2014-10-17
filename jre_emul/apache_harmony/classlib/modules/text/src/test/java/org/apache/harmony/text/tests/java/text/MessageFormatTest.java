@@ -244,9 +244,9 @@ public class MessageFormatTest extends TestCase {
 
         format.applyPattern("{0, choice,0#no|1#one|2#{1,number}}");
         assertEquals("Wrong choice format",
-                        "0#no|1#one|2#{1,number}", ((ChoiceFormat) format.getFormats()[0]).toPattern());
+                "0.0#no|1.0#one|2.0#{1,number}", ((ChoiceFormat) format.getFormats()[0]).toPattern());
         assertEquals("Wrong choice pattern",
-                "{0,choice,0#no|1#one|2#{1,number}}", format.toPattern());
+                "{0,choice,0.0#no|1.0#one|2.0#{1,number}}", format.toPattern());
         assertEquals("Wrong formatted choice", "3.6", format.format(
                 new Object[] { new Integer(2), new Float(3.6) }));
 

@@ -102,17 +102,29 @@ public class IosHttpURLConnection extends HttpURLConnection {
   @Override
   public Map<String, List<String>> getHeaderFields() {
     try {
-      Map<String, List<String>> map = new HashMap<String, List<String>>();
-      for (HeaderEntry entry : getHeaders()) {
-        map.put(entry.getKey(), entry.getValue());
-      }
-      return map;
+      getResponse();
+      return getHeaderFieldsDoNotForceResponse();
     } catch (IOException e) {
       return Collections.EMPTY_MAP;
     }
   }
 
-  private List<IosHttpURLConnection.HeaderEntry> getHeaders() throws IOException {
+  private Map<String, List<String>> getHeaderFieldsDoNotForceResponse() {
+    Map<String, List<String>> map = new HashMap<String, List<String>>();
+    for (HeaderEntry entry : headers) {
+      String k = entry.getKey();
+      String v = entry.getValue();
+      List<String> values = map.get(k);
+      if (values == null) {
+        values = new ArrayList<String>();
+        map.put(k, values);
+      }
+      values.add(v);
+    }
+    return map;
+  }
+
+  private List<HeaderEntry> getResponseHeaders() throws IOException {
     getResponse();
     return headers;
   }
@@ -120,30 +132,43 @@ public class IosHttpURLConnection extends HttpURLConnection {
   @Override
   public String getHeaderField(int pos) {
     try {
-      return getHeaders().get(pos).getValueAsString();
+      List<HeaderEntry> headers = getResponseHeaders();
+      return pos < headers.size() ? headers.get(pos).getValue() : null;
     } catch (IOException e) {
       return null;
     }
   }
 
+  /**
+   * Returns the value of the named header field.
+   *
+   * If called on a connection that sets the same header multiple times with
+   * possibly different values, only the last value is returned.
+   */
   @Override
   public String getHeaderField(String key) {
     try {
-      for (HeaderEntry entry : getHeaders()) {
-        if (key == null) {
-          if (entry.getKey() == null) {
-            return entry.getValueAsString();
-          }
-          continue;
-        }
-        if (key.equals(entry.getKey())) {
-          return entry.getValueAsString();
-        }
-      }
-      return null;
-    } catch (IOException e) {
+      getResponse();
+      return getHeaderFieldDoNotForceResponse(key);
+    } catch(IOException e) {
       return null;
     }
+  }
+
+  private String getHeaderFieldDoNotForceResponse(String key) {
+    for (int i = headers.size() - 1; i >= 0; i--) {
+      HeaderEntry entry = headers.get(i);
+      if (key == null) {
+        if (entry.getKey() == null) {
+          return entry.getValue();
+        }
+        continue;
+      }
+      if (key.equals(entry.getKey())) {
+        return entry.getValue();
+      }
+    }
+    return null;
   }
 
   @Override
@@ -161,7 +186,8 @@ public class IosHttpURLConnection extends HttpURLConnection {
   @Override
   public String getHeaderFieldKey(int posn) {
     try {
-      return getHeaders().get(posn).getKey();
+      List<HeaderEntry> headers = getResponseHeaders();
+      return posn < headers.size() ? headers.get(posn).getKey() : null;
     } catch (IOException e) {
       return null;
     }
@@ -180,8 +206,17 @@ public class IosHttpURLConnection extends HttpURLConnection {
   @Override
   public long getHeaderFieldLong(String field, long defaultValue) {
     String longString = getHeaderField(field);
+    return headerValueToLong(longString, defaultValue);
+  }
+
+  private long getHeaderFieldLongDoNotForceResponse(String field, long defaultValue) {
+    String longString = getHeaderFieldDoNotForceResponse(field);
+    return headerValueToLong(longString, defaultValue);
+  }
+
+  private long headerValueToLong(String value, long defaultValue) {
     try {
-      return Long.parseLong(longString);
+      return Long.parseLong(value);
     } catch (NumberFormatException e) {
       return defaultValue;
     }
@@ -193,7 +228,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
       throw new IllegalStateException(
           "Cannot access request header fields after connection is set");
     }
-    return getHeaderFields();
+    return getHeaderFieldsDoNotForceResponse();
   }
 
   @Override
@@ -223,7 +258,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
     if (field == null) {
       return null;
     }
-    return getHeaderField(field);
+    return getHeaderFieldDoNotForceResponse(field);
   }
 
   @Override
@@ -233,7 +268,7 @@ public class IosHttpURLConnection extends HttpURLConnection {
 
   @Override
   public long getIfModifiedSince() {
-    return getHeaderFieldLong("If-Modified-Since", 0L);
+    return getHeaderFieldLongDoNotForceResponse("If-Modified-Since", 0L);
   }
 
   @Override
@@ -250,6 +285,9 @@ public class IosHttpURLConnection extends HttpURLConnection {
 
   @Override
   public native OutputStream getOutputStream() throws IOException /*-[
+    if(self->connected_) {
+      @throw [[JavaLangIllegalStateException alloc] initWithNSString:@"Cannot get output stream after connection is made"];
+    }
     if (!nativeRequestData_) {  // Don't reallocate if requested twice.
       ComGoogleJ2objcNetIosHttpURLConnection_set_nativeRequestData_(
           self, [NSDataOutputStream stream]);
@@ -265,41 +303,52 @@ public class IosHttpURLConnection extends HttpURLConnection {
     makeSynchronousRequest();
   }
 
+  @Override
+  public int getResponseCode() throws IOException {
+    getResponse();
+    return responseCode;
+  }
+
   private native void makeSynchronousRequest() throws IOException /*-[
-    if (responseCode_ != -1) {
+    if (self->responseCode_ != -1) {
       // Request already made.
       return;
     }
-    if (responseException_) {
-      @throw responseException_;
+    if (self->responseException_) {
+      @throw self->responseException_;
     }
+    [self connect];
 
     NSMutableURLRequest *request =
-        [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[url_ toExternalForm]]];
-    request.HTTPMethod = method_;
-    request.cachePolicy = useCaches_ ?
+        [NSMutableURLRequest requestWithURL:[NSURL URLWithString:[self->url_ toExternalForm]]];
+    request.HTTPShouldHandleCookies = NO;
+    request.HTTPMethod = self->method_;
+    request.cachePolicy = self->useCaches_ ?
         NSURLRequestUseProtocolCachePolicy : NSURLRequestReloadIgnoringLocalCacheData;
-    request.timeoutInterval = readTimeout_ > 0 ? (readTimeout_ / 1000.0) : JavaLangDouble_MAX_VALUE;
-    int n = [headers_ size];
+    int readTimeout = [self getReadTimeout];
+    request.timeoutInterval = readTimeout > 0 ? (readTimeout / 1000.0) : JavaLangDouble_MAX_VALUE;
+    int n = [self->headers_ size];
     for (int i = 0; i < n; i++) {
-      ComGoogleJ2objcNetIosHttpURLConnection_HeaderEntry *entry = [headers_ getWithInt:i];
+      ComGoogleJ2objcNetIosHttpURLConnection_HeaderEntry *entry = [self->headers_ getWithInt:i];
       if (entry->key_) {
-        [request setValue:[entry getValueAsString] forHTTPHeaderField:entry->key_];
+        [request setValue:[entry getValue] forHTTPHeaderField:entry->key_];
       }
     }
 
-    if (doOutput_) {
-      if ([method_ isEqualToString:@"GET"]) {
-        method_ = @"POST";  // GET doesn't support output, so assume POST.
-      } else if (![method_ isEqualToString:@"POST"] && ![method_ isEqualToString:@"PUT"] &&
-                 ![method_ isEqualToString:@"PATCH"]) {
-        NSString *errMsg = [NSString stringWithFormat:@"%@ does not support writing", method_];
-        responseException_ = [[JavaNetProtocolException alloc] initWithNSString:errMsg];
-        @throw responseException_;
+    if (self->doOutput_) {
+      if ([self->method_ isEqualToString:@"GET"]) {
+        self->method_ = @"POST";  // GET doesn't support output, so assume POST.
+      } else if (![self->method_ isEqualToString:@"POST"] &&
+                 ![self->method_ isEqualToString:@"PUT"] &&
+                 ![self->method_ isEqualToString:@"PATCH"]) {
+        NSString *errMsg =
+            [NSString stringWithFormat:@"%@ does not support writing", self->method_];
+        self->responseException_ = [[JavaNetProtocolException alloc] initWithNSString:errMsg];
+        @throw self->responseException_;
       }
-      [request setValue:contentType_ forHTTPHeaderField:@"Content-Type"];
-      if (nativeRequestData_) {
-        request.HTTPBody = [(NSDataOutputStream *) nativeRequestData_ data];
+      [request setValue:[self getContentType] forHTTPHeaderField:@"Content-Type"];
+      if (self->nativeRequestData_) {
+        request.HTTPBody = [(NSDataOutputStream *) self->nativeRequestData_ data];
       }
     }
 
@@ -308,10 +357,10 @@ public class IosHttpURLConnection extends HttpURLConnection {
     NSData *responseData = [NSURLConnection sendSynchronousRequest:request
                                                  returningResponse:&response
                                                              error:&error];
-    responseCode_ = response ? [response statusCode] : [error code];
-    responseMessage_ =
-        [ComGoogleJ2objcNetIosHttpURLConnection getResponseStatusTextWithInt:responseCode_];
-    contentLength_ = [responseData length];
+    self->responseCode_ = (int) (response ? [response statusCode] : [error code]);
+    self->responseMessage_ =
+        [ComGoogleJ2objcNetIosHttpURLConnection getResponseStatusTextWithInt:self->responseCode_];
+    self->contentLength_ = (int) ([responseData length]);
 
     if (error || [response statusCode] >= JavaNetHttpURLConnection_HTTP_BAD_REQUEST) {
       if (responseData) {
@@ -323,30 +372,35 @@ public class IosHttpURLConnection extends HttpURLConnection {
           [[NSDataInputStream alloc] initWithData:responseData]);
     }
 
-    NSString *url = [url_ description];  // Use original URL in any error text.
+    NSString *url = [self->url_ description];  // Use original URL in any error text.
     if (error) {
       if ([[error domain] isEqualToString:@"NSURLErrorDomain"]) {
         switch ([error code]) {
           case NSURLErrorBadURL:
-            responseException_ = [[JavaNetMalformedURLException alloc] initWithNSString:url]; break;
+            self->responseException_ =
+                [[JavaNetMalformedURLException alloc] initWithNSString:url]; break;
           case NSURLErrorCannotConnectToHost:
           case NSURLErrorNotConnectedToInternet:
           case NSURLErrorSecureConnectionFailed:
-            responseException_ = [[JavaNetConnectException alloc]
-                                  initWithNSString:[error description]]; break;
+            self->responseException_ =
+                [[JavaNetConnectException alloc] initWithNSString:[error description]]; break;
           case NSURLErrorCannotFindHost:
-            responseException_ = [[JavaNetUnknownHostException alloc] initWithNSString:url]; break;
+            self->responseException_ =
+                [[JavaNetUnknownHostException alloc] initWithNSString:url]; break;
         }
       }
-      if (!responseException_) {
-        responseException_ = [[JavaIoIOException alloc] initWithNSString:[error description]];
+      if (!self->responseException_) {
+        self->responseException_ = [[JavaIoIOException alloc] initWithNSString:[error description]];
       }
-      @throw responseException_;
+      @throw self->responseException_;
     }
+
+    // Clear request headers, and add response headers.
+    [self->headers_ clear];
 
     // The HttpURLConnection headerFields map uses a null key for Status-Line.
     NSString *statusLine =
-        [NSString stringWithFormat:@"HTTP/1.1 %d %@", responseCode_, responseMessage_];
+        [NSString stringWithFormat:@"HTTP/1.1 %d %@", self->responseCode_, self->responseMessage_];
     [self addHeaderWithNSString:nil withNSString:statusLine];
 
     // Copy remaining response headers.
@@ -357,15 +411,6 @@ public class IosHttpURLConnection extends HttpURLConnection {
 
   private void addHeader(String k, String v) {
     headers.add(new HeaderEntry(k, v));
-  }
-
-  private List<String> getHeader(String k) {
-    for (HeaderEntry entry : headers) {
-      if (entry.key == k) {
-        return entry.value;
-      }
-    }
-    return null;
   }
 
   private void removeHeader(String k) {
@@ -382,23 +427,20 @@ public class IosHttpURLConnection extends HttpURLConnection {
   private void setHeader(String k, String v) {
     for (HeaderEntry entry : headers) {
       if (entry.key == k) {
-        for (String entryVal : entry.value) {
-          if (entryVal.equals(v)) {
-            return;  // already set.
-          }
-        }
-        entry.value.add(v);
+        headers.remove(entry);
+        break;
       }
     }
+    headers.add(new HeaderEntry(k, v));
   }
 
-  private static class HeaderEntry implements Map.Entry<String, List<String>> {
+  private static class HeaderEntry implements Map.Entry<String, String> {
     private final String key;
-    private final List<String> value;
+    private final String value;
 
     HeaderEntry(String k, String v) {
       this.key = k;
-      this.value = Arrays.asList(v.split("[s,]+"));
+      this.value = v;
     }
 
     @Override
@@ -407,27 +449,13 @@ public class IosHttpURLConnection extends HttpURLConnection {
     }
 
     @Override
-    public List<String> getValue() {
+    public String getValue() {
       return value;
     }
 
     @Override
-    public List<String> setValue(List<String> object) {
+    public String setValue(String object) {
       throw new AssertionError("mutable method called on immutable class");
-    }
-
-    public String getValueAsString() {
-      if (value.isEmpty()) {
-        return "";
-      }
-      StringBuilder sb = new StringBuilder();
-      Iterator<String> iter = value.iterator();
-      sb.append(iter.next());
-      while (iter.hasNext()) {
-        sb.append(", ");
-        sb.append(iter.next());
-      }
-      return sb.toString();
     }
   }
 

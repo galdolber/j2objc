@@ -40,7 +40,7 @@ public class IOSCollator extends Collator {
   }
 
   private native void initNativeLocale(Locale locale) /*-[
-    nsLocale_ = [[NSLocale alloc] initWithLocaleIdentifier:[locale description]];
+    self->nsLocale_ = [[NSLocale alloc] initWithLocaleIdentifier:[locale description]];
   ]-*/;
 
   @Override
@@ -48,7 +48,7 @@ public class IOSCollator extends Collator {
     return [string1 compare:string2
                     options:NSLiteralSearch
                       range:NSMakeRange(0, [string1 length])
-                     locale:nsLocale_];
+                     locale:self->nsLocale_];
   ]-*/;
 
   @Override
@@ -85,7 +85,7 @@ public class IOSCollator extends Collator {
 
   @Override
   public native int hashCode() /*-[
-    return [(NSLocale *) nsLocale_ hash];
+    return [(NSLocale *) self->nsLocale_ hash];
   ]-*/;
 
   @Override
@@ -127,8 +127,9 @@ public class IOSCollator extends Collator {
 
     @Override
     public native byte[] toByteArray() /*-[
-      const char *utf = [source_ UTF8String];
-      return [IOSByteArray arrayWithBytes:utf count:strlen(utf) + 1];  // Include null terminator.
+      const char *utf = [[self getSourceString] UTF8String];
+      // Include null terminator.
+      return [IOSByteArray arrayWithBytes:(const jbyte *)utf count:(jint)strlen(utf) + 1];
     ]-*/;
   }
 }

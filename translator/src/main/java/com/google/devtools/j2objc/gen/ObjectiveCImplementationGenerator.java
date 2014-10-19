@@ -19,6 +19,7 @@ package com.google.devtools.j2objc.gen;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.j2objc.annotations.StripReflection;
 import com.google.devtools.j2objc.J2ObjC;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
@@ -197,7 +198,7 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
       printStaticReferencesMethod(node);
       printStaticVars(node);
       printMethods(node);
-      if (!Options.stripReflection()) {
+      if (!Options.stripReflection() && !BindingUtil.hasAnnotation(node.getTypeBinding(), StripReflection.class)) {
         printTypeAnnotationsMethod(node);
         printMethodAnnotationMethods(methods);
         printFieldAnnotationMethods(node);
@@ -231,7 +232,7 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
     printf("  return [IOSClass classWithProtocol:@protocol(%s)];\n", typeName);
     println("}");
     printMethods(methods);
-    if (!Options.stripReflection()) {
+    if (!Options.stripReflection() && !BindingUtil.hasAnnotation(node.getTypeBinding(), StripReflection.class)) {
       printTypeAnnotationsMethod(node);
       printMetadata(node);
     }
@@ -411,7 +412,7 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
         printMethod(method);
       }
     }
-    if (!Options.stripReflection()) {
+    if (!Options.stripReflection() && !BindingUtil.hasAnnotation(node.getTypeBinding(), StripReflection.class)) {
       printMetadata(node);
     }
     println("\n@end\n");
@@ -436,7 +437,7 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
 
     printDeclarations(node.getBodyDeclarations());
 
-    if (!Options.stripReflection()) {
+    if (!Options.stripReflection() && !BindingUtil.hasAnnotation(node.getTypeBinding(), StripReflection.class)) {
       printTypeAnnotationsMethod(node);
       printMetadata(node);
     }

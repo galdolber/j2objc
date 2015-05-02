@@ -22,9 +22,15 @@
 #import "IOSClass.h"
 #import "IOSObjectArray.h"
 #import "IOSReflection.h"
+#import "java/lang/AssertionError.h"
+#import "java/lang/Exception.h"
+#import "java/lang/reflect/ExecutableMember.h"
 
-@implementation JavaClassMetadata
+@implementation JavaClassMetadata {
+  J2ObjcClassInfo *data_;
+}
 
+@synthesize version;
 @synthesize typeName;
 @synthesize packageName;
 @synthesize enclosingName;
@@ -35,6 +41,7 @@
 - (instancetype)initWithMetadata:(J2ObjcClassInfo *)metadata {
   if (self = [super init]) {
     data_ = metadata;
+    version = data_->version;
     NSStringEncoding defaultEncoding = [NSString defaultCStringEncoding];
     typeName = [[NSString alloc] initWithCString:metadata->typeName encoding:defaultEncoding];
     if (metadata->packageName) {
@@ -81,6 +88,37 @@
   return info ? AUTORELEASE([[JavaMethodMetadata alloc] initWithMetadata:info]) : nil;
 }
 
+static jint countArgs(char *s) {
+  jint count = 0;
+  while (*s) {
+    if (*s++ == ':') {
+      ++count;
+    }
+  }
+  return count;
+}
+
+- (JavaMethodMetadata *)findMethodMetadataWithJavaName:(NSString *)javaName
+                                        argCount:(jint)argCount {
+  const char *name = [javaName cStringUsingEncoding:[NSString defaultCStringEncoding]];
+  for (int i = 0; i < data_->methodCount; i++) {
+    const char *cname = data_->methods[i].javaName;
+    if (cname && strcmp(name, cname) == 0
+        && argCount == countArgs((char *)data_->methods[i].selector)) {
+      // Skip leading matches followed by "With", which follow the standard selector
+      // pattern using typed parameters. This method is for resolving mapped methods
+      // which don't follow that pattern, and thus need help from metadata.
+      char buffer[256];
+      strcpy(buffer, cname);
+      strcat(buffer, "With");
+      if (strncmp(buffer, data_->methods[i].selector, strlen(buffer)) != 0) {
+        return [[JavaMethodMetadata alloc] initWithMetadata:&data_->methods[i]];
+      }
+    }
+  }
+  return nil;
+}
+
 - (const J2ObjcFieldInfo *)findFieldInfo:(const char *)fieldName {
   for (int i = 0; i < data_->fieldCount; i++) {
     const J2ObjcFieldInfo *fieldInfo = &data_->fields[i];
@@ -110,8 +148,7 @@
   if (size == 0) {
     return nil;
   }
-  IOSObjectArray *result = [IOSObjectArray arrayWithLength:size type:
-      [IOSClass classWithProtocol:@protocol(JavaLangReflectType)]];
+  IOSObjectArray *result = [IOSObjectArray arrayWithLength:size type:JavaLangReflectType_class_()];
   for (int i = 0; i < size; i++) {
     IOSObjectArray_Set(result, i, JreTypeForString(data_->superclassTypeArgs[i]));
   }
@@ -120,7 +157,7 @@
 
 - (IOSObjectArray *)allFields {
   IOSObjectArray *result =
-      [IOSObjectArray arrayWithLength:data_->fieldCount type:[JavaFieldMetadata getClass]];
+      [IOSObjectArray arrayWithLength:data_->fieldCount type:NSObject_class_()];
   J2ObjcFieldInfo *fields = (J2ObjcFieldInfo *) data_->fields;
   for (int i = 0; i < data_->fieldCount; i++) {
     [result replaceObjectAtIndex:i
@@ -131,7 +168,7 @@
 
 - (IOSObjectArray *)allMethods {
   IOSObjectArray *result =
-      [IOSObjectArray arrayWithLength:data_->methodCount type:[JavaMethodMetadata getClass]];
+      [IOSObjectArray arrayWithLength:data_->methodCount type:NSObject_class_()];
   J2ObjcMethodInfo *methods = (J2ObjcMethodInfo *) data_->methods;
   for (int i = 0; i < data_->methodCount; i++) {
     [result replaceObjectAtIndex:i
@@ -140,26 +177,55 @@
   return result;
 }
 
+- (IOSObjectArray *)getInnerClasses {
+  if (J2OBJC_METADATA_VERSION < 2) {
+    return 0;
+  }
+  uint16_t size = data_->innerClassCount;
+  if (size == 0) {
+    return nil;
+  }
+  IOSObjectArray *result = [IOSObjectArray arrayWithLength:size type:JavaLangReflectType_class_()];
+  for (int i = 0; i < size; i++) {
+    IOSObjectArray_Set(result, i, JreTypeForString(data_->innerClassnames[i]));
+  }
+  return result;
+}
+
+- (JavaEnclosingMethodMetadata *)getEnclosingMethod {
+  if (J2OBJC_METADATA_VERSION < 2 || !data_->enclosingMethod) {
+    return nil;
+  }
+  return [[[JavaEnclosingMethodMetadata alloc]
+           initWithMetadata:data_->enclosingMethod] autorelease];
+}
+
+- (NSString *)genericSignature {
+  if (J2OBJC_METADATA_VERSION < 2 || !data_->genericSignature) {
+    return nil;
+  }
+  return [NSString stringWithUTF8String:data_->genericSignature];
+}
+
 - (NSString *)description {
   return [NSString stringWithFormat:@"{ typeName=%@ packageName=%@ modifiers=0x%x }",
           typeName, packageName, modifiers];
 }
 
-- (void)dealloc {
-  if (attributes) {
-    free(attributes);
-  }
 #if ! __has_feature(objc_arc)
+- (void)dealloc {
   [typeName release];
   [packageName release];
   [enclosingName release];
   [super dealloc];
-#endif
 }
+#endif
 
 @end
 
-@implementation JavaFieldMetadata
+@implementation JavaFieldMetadata {
+  const J2ObjcFieldInfo *data_;
+}
 
 - (instancetype)initWithMetadata:(const J2ObjcFieldInfo *)metadata {
   if (self = [super init]) {
@@ -198,9 +264,18 @@
   return &data_->constantValue;
 }
 
+- (NSString *)genericSignature {
+  if (J2OBJC_METADATA_VERSION < 2 || !data_->genericSignature) {
+    return nil;
+  }
+  return [NSString stringWithUTF8String:data_->genericSignature];
+}
+
 @end
 
-@implementation JavaMethodMetadata
+@implementation JavaMethodMetadata {
+  const J2ObjcMethodInfo *data_;
+}
 
 - (instancetype)initWithMetadata:(const J2ObjcMethodInfo *)metadata {
   if (self = [super init]) {
@@ -223,6 +298,10 @@
   return data_->javaName ? [NSString stringWithUTF8String:data_->javaName] : nil;
 }
 
+- (NSString *)objcName {
+  return [NSString stringWithUTF8String:data_->selector];
+}
+
 - (int)modifiers {
   return data_->modifiers;
 }
@@ -232,16 +311,35 @@
 }
 
 - (IOSObjectArray *)exceptionTypes {
-  NSString *exceptionsStr = [NSString stringWithUTF8String:data_->exceptions];
-  NSArray *exceptionsArray = [exceptionsStr componentsSeparatedByString:@";"];
-  // The last string is empty, due to the trailing semi-colon of the last exception.
-  NSUInteger n = [exceptionsArray count] - 1;
-  IOSObjectArray *result = [IOSObjectArray arrayWithLength:(jint)n type:[IOSClass getClass]];
+  if (!data_->exceptions) {
+    return nil;
+  }
+
+  const char *p = data_->exceptions;
+  int n = 0;
+  while (p != NULL) {
+    const char *semi = strchr(p, ';');
+    if (semi != NULL) {
+      ++n;
+      p = semi + 1;
+    } else {
+      p = NULL;
+    }
+  }
+  IOSObjectArray *result = [IOSObjectArray arrayWithLength:(jint)n
+                                                      type:JavaLangReflectType_class_()];
   jint count = 0;
-  for (NSUInteger i = 0; i < n; i++) {
-    // Strip off leading 'L'.
-    NSString *thrownException = [[exceptionsArray objectAtIndex:i] substringFromIndex:1];
-    IOSObjectArray_Set(result, count++, [IOSClass forName:thrownException]);
+  p = data_->exceptions;
+  while (p != NULL) {
+    char *semi = strchr(p, ';');
+    if (semi != NULL) {
+      char *exc = strndup(p, semi - p + 1);  // Include trailing ';'.
+      IOSObjectArray_Set(result, count++, JreTypeForString(exc));
+      free(exc);
+      p = semi + 1;
+    } else {
+      p = NULL;
+    }
   }
   return result;
 }
@@ -250,5 +348,37 @@
   const char *name = data_->javaName ? data_->javaName : data_->selector;
   return strcmp(name, "init") == 0 || strstr(name, "initWith") == name;
 }
+
+- (NSString *)genericSignature {
+  if (J2OBJC_METADATA_VERSION < 2 || !data_->genericSignature) {
+    return nil;
+  }
+  return [NSString stringWithUTF8String:data_->genericSignature];
+}
+
+@end
+
+@implementation JavaEnclosingMethodMetadata
+
+@synthesize typeName;
+@synthesize selector;
+
+- (instancetype)initWithMetadata:(const J2ObjCEnclosingMethodInfo *)metadata {
+  if (self = [super init]) {
+    typeName = [[NSString alloc] initWithCString:metadata->typeName
+                                        encoding:NSUTF8StringEncoding];
+    selector = [[NSString alloc] initWithCString:metadata->selector
+                                        encoding:NSUTF8StringEncoding];
+  }
+  return self;
+}
+
+#if ! __has_feature(objc_arc)
+- (void)dealloc {
+  [typeName release];
+  [selector release];
+  [super dealloc];
+}
+#endif
 
 @end

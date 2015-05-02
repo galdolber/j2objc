@@ -32,12 +32,6 @@ public class UnsequencedExpressionRewriterTest extends GenerationTest {
     Options.enableExtractUnsequencedModifications();
   }
 
-  @Override
-  protected void tearDown() throws Exception {
-    Options.resetExtractUnsequencedModifications();
-    super.tearDown();
-  }
-
   public void testUnsequencedPrefixExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { void test(int i) { int j = ++i - ++i; } }", "Test", "Test.m");
@@ -64,14 +58,12 @@ public class UnsequencedExpressionRewriterTest extends GenerationTest {
         "jboolean unseq$1;",
         "if (!(unseq$1 = (i == 0 || i == 1))) {",
         "  jint unseq$2 = ++i;",
-        "  unseq$1 = (unseq$1 || unseq$2 + i == 2);",
+        "  if (!(unseq$1 = (unseq$2 + i == 2))) {",
+        "    jint unseq$3 = i++;",
+        "    unseq$1 = (unseq$1 || unseq$3 + i == 3 || i == 4);",
+        "  }",
         "}",
-        "jboolean unseq$3;",
-        "if (!(unseq$3 = unseq$1)) {",
-        "  jint unseq$4 = i++;",
-        "  unseq$3 = (unseq$3 || unseq$4 + i == 3);",
-        "}",
-        "return unseq$3 || i == 4;");
+        "return unseq$1;");
   }
 
   public void testUnsequencedConditionalExpression() throws IOException {
@@ -195,5 +187,13 @@ public class UnsequencedExpressionRewriterTest extends GenerationTest {
         "  else {",
         "  }",
         "}");
+  }
+
+  public void testAssignToArray() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { void test(int[] arr, int i) { arr[i] = i++; } }", "Test", "Test.m");
+    assertTranslatedLines(translation,
+        "jint unseq$1 = i;",
+        "*IOSIntArray_GetRef(nil_chk(arr), unseq$1) = i++;");
   }
 }

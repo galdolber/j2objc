@@ -39,9 +39,9 @@ import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
 import com.google.devtools.j2objc.types.GeneratedMethodBinding;
 import com.google.devtools.j2objc.util.BindingUtil;
+import com.google.devtools.j2objc.util.TranslationUtil;
 import com.google.devtools.j2objc.util.UnicodeUtils;
 
-import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.Modifier;
 
@@ -104,6 +104,8 @@ public class InitializationNormalizer extends TreeVisitor {
         case FIELD_DECLARATION:
           addFieldInitializer(member, binding.isInterface(), initStatements, classInitStatements);
           break;
+        default:
+          // Fall-through.
       }
     }
 
@@ -173,6 +175,8 @@ public class InitializationNormalizer extends TreeVisitor {
         return false;
       case STRING_LITERAL:
         return !UnicodeUtils.hasValidCppCharacters(((StringLiteral) initializer).getLiteralValue());
+      default:
+        // Fall-through.
     }
     if (BindingUtil.isPrimitiveConstant(frag.getVariableBinding())) {
       return false;
@@ -185,7 +189,7 @@ public class InitializationNormalizer extends TreeVisitor {
           && !UnicodeUtils.hasValidCppCharacters((String) constantValue)) {
         return true;
       }
-      frag.setInitializer(TreeUtil.newLiteral(constantValue));
+      frag.setInitializer(TreeUtil.newLiteral(constantValue, typeEnv));
       return false;
     }
     return true;
@@ -213,9 +217,8 @@ public class InitializationNormalizer extends TreeVisitor {
       // isn't a super invocation, add one (like all Java compilers do).
       if (superCallIdx == -1) {
         ITypeBinding superType = node.getMethodBinding().getDeclaringClass().getSuperclass();
-        GeneratedMethodBinding newBinding = GeneratedMethodBinding.newConstructor(
-            superType, Modifier.PUBLIC);
-        stmts.add(0, new SuperConstructorInvocation(newBinding));
+        stmts.add(0, new SuperConstructorInvocation(
+            TranslationUtil.findDefaultConstructorBinding(superType, typeEnv)));
         superCallIdx = 0;
       }
 
@@ -253,22 +256,17 @@ public class InitializationNormalizer extends TreeVisitor {
     return !(firstStmt instanceof ConstructorInvocation);
   }
 
-  void addDefaultConstructor(
+  private void addDefaultConstructor(
       ITypeBinding type, List<BodyDeclaration> members, List<Statement> initStatements) {
     int constructorModifier =
         type.getModifiers() & (Modifier.PUBLIC | Modifier.PROTECTED | Modifier.PRIVATE);
-    GeneratedMethodBinding binding = GeneratedMethodBinding.newConstructor(
-        type.getSuperclass(), constructorModifier);
-    initStatements.add(0, new SuperConstructorInvocation(binding));
-    members.add(createMethod(GeneratedMethodBinding.newConstructor(type, constructorModifier),
-                             initStatements));
-  }
-
-  private MethodDeclaration createMethod(IMethodBinding binding, List<Statement> statements) {
+    MethodDeclaration method = new MethodDeclaration(
+        GeneratedMethodBinding.newConstructor(type, constructorModifier, typeEnv));
     Block body = new Block();
-    TreeUtil.copyList(statements, body.getStatements());
-    MethodDeclaration method = new MethodDeclaration(binding);
     method.setBody(body);
-    return method;
+    TreeUtil.copyList(initStatements, body.getStatements());
+    body.getStatements().add(0, new SuperConstructorInvocation(
+        TranslationUtil.findDefaultConstructorBinding(type.getSuperclass(), typeEnv)));
+    members.add(method);
   }
 }

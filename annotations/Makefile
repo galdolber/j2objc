@@ -19,6 +19,7 @@ SUFFIXES:
 J2OBJC_ROOT = ..
 
 include ../make/common.mk
+include classes.mk
 
 JAR_NAME = j2objc_annotations.jar
 JAR = $(BUILD_DIR)/$(JAR_NAME)
@@ -27,23 +28,15 @@ DIST_JAR = $(DIST_JAR_DIR)/$(JAR_NAME)
 CLASSES_DIR = $(BUILD_DIR)/classes
 JAVA_SOURCE_DIR = src/main/java
 
-SOURCE_JAVA = \
-    com/google/j2objc/annotations/AutoreleasePool.java \
-    com/google/j2objc/annotations/LoopTranslation.java \
-    com/google/j2objc/annotations/ObjectiveCName.java \
-    com/google/j2objc/annotations/ReflectionSupport.java \
-    com/google/j2objc/annotations/RetainedLocalRef.java \
-    com/google/j2objc/annotations/Weak.java \
-    com/google/j2objc/annotations/WeakOuter.java
-
-SOURCE_JAVA_FULL = $(SOURCE_JAVA:%=$(JAVA_SOURCE_DIR)/%)
+SOURCE_JAVA_FULL = $(ANNOTATION_SOURCE_JAVA:%=$(JAVA_SOURCE_DIR)/%)
 
 $(BUILD_DIR) $(CLASSES_DIR) $(DIST_JAR_DIR):
 	@mkdir -p $@
 
 $(JAR): $(SOURCE_JAVA_FULL) | $(BUILD_DIR) $(CLASSES_DIR)
 	@echo Building j2objc annotations
-	@javac -d $(CLASSES_DIR) -source 1.6 -target 1.6 -nowarn $^
+	@javac -encoding UTF-8 -d $(CLASSES_DIR) -source 1.6 -target 1.6 \
+	    -nowarn $^
 	@jar cf $(JAR) -C $(CLASSES_DIR) .
 
 $(DIST_JAR): $(JAR) | $(DIST_JAR_DIR)

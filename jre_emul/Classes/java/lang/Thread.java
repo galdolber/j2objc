@@ -20,7 +20,9 @@ package java.lang;
 import com.google.j2objc.annotations.Weak;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /*-[
 #import "java/lang/IllegalThreadStateException.h"
@@ -318,9 +320,7 @@ public class Thread implements Runnable {
     NSThread *currentThread = [NSThread currentThread];
     NSMutableDictionary *currentThreadData = [currentThread threadDictionary];
     if (!group) {
-      JavaLangThread *currentJavaThread =
-          [currentThreadData objectForKey:JavaLangThread_JAVA_THREAD_];
-      group = [currentJavaThread getThreadGroup];
+      group = [[JavaLangThread currentThread] getThreadGroup];
     }
     assert(group != nil);
     self->threadGroup_ = RETAIN_(group);
@@ -360,7 +360,7 @@ public class Thread implements Runnable {
       [thread setStackSize:(NSUInteger) stack];
     }
     [thread setThreadPriority:[NSThread threadPriority]];
-    NSNumber *threadId = [NSNumber numberWithLongLong:[JavaLangThread getNextThreadId]];
+    NSNumber *threadId = [NSNumber numberWithLongLong:JavaLangThread_getNextThreadId()];
     [newThreadData setObject:threadId forKey:JavaLangThread_THREAD_ID_];
 
     if (!name) {
@@ -648,9 +648,9 @@ public class Thread implements Runnable {
    * @see Thread#isInterrupted
    */
   public static native boolean interrupted() /*-[
-    JavaLangThread *currentThread = [JavaLangThread currentThread];
-    BOOL result = currentThread->interrupted__;
-    currentThread->interrupted__ = NO;
+    JavaLangThread *currentThread = JavaLangThread_currentThread();
+    BOOL result = currentThread->interrupted_;
+    currentThread->interrupted_ = NO;
     return result;
   ]-*/;
 
@@ -1028,7 +1028,7 @@ public class Thread implements Runnable {
     if (thread) {
       return thread->threadGroup_; // ThreadGroup is instance of UEH
     }
-    return [JavaLangThread getDefaultUncaughtExceptionHandler];
+    return JavaLangThread_getDefaultUncaughtExceptionHandler();
   ]-*/;
 
   public native void setUncaughtExceptionHandler(UncaughtExceptionHandler handler) /*-[
@@ -1085,5 +1085,13 @@ public class Thread implements Runnable {
                       "Expected " + interruptAction + " but was " + removed);
           }
       }
+  }
+
+  /**
+   * Returns a map of stack traces for all live threads.
+   */
+  // TODO(user): Can we update this to return something useful?
+  public static Map<Thread,StackTraceElement[]> getAllStackTraces() {
+    return Collections.<Thread, StackTraceElement[]>emptyMap();
   }
 }

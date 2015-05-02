@@ -25,7 +25,6 @@ import com.google.devtools.j2objc.ast.MethodInvocation;
 import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
 import com.google.devtools.j2objc.ast.SuperMethodInvocation;
 import com.google.devtools.j2objc.ast.TreeVisitor;
-import com.google.devtools.j2objc.types.IOSMethodBinding;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -41,8 +40,7 @@ import java.util.List;
 public class VarargsRewriter extends TreeVisitor {
 
   private void rewriteVarargs(IMethodBinding method, List<Expression> args) {
-    method = method.getMethodDeclaration();
-    if (!method.isVarargs() || IOSMethodBinding.hasVarArgsTarget(method)) {
+    if (!method.isVarargs()) {
       return;
     }
     ITypeBinding[] paramTypes = method.getParameterTypes();
@@ -50,15 +48,21 @@ public class VarargsRewriter extends TreeVisitor {
     assert lastParam.isArray();
     int varargsSize = args.size() - paramTypes.length + 1;
     if (varargsSize == 1) {
-      ITypeBinding lastArgType = args.get(args.size() - 1).getTypeBinding();
-      if (lastArgType.isNullType()) {
-        return;
-      }
-      if (lastParam.getDimensions() == lastArgType.getDimensions()
-          && lastParam.getElementType().isPrimitive()
-              == lastArgType.getElementType().isPrimitive()) {
+      Expression lastArg = args.get(args.size() - 1);
+      ITypeBinding lastArgType = lastArg.getTypeBinding();
+      if (lastArgType.isAssignmentCompatible(lastParam)) {
         // Last argument is already an array.
         return;
+      }
+      // Special case: check for a clone method invocation, since clone()'s return
+      // type is declared as Object but it always returns the caller's type.
+      if (lastArg instanceof MethodInvocation) {
+        MethodInvocation invocation = (MethodInvocation) lastArg;
+        if (invocation.getMethodBinding().getName().equals("clone")
+            && invocation.getArguments().isEmpty()
+            && invocation.getExpression().getTypeBinding().isAssignmentCompatible(lastParam)) {
+          return;
+        }
       }
     }
 
@@ -66,9 +70,9 @@ public class VarargsRewriter extends TreeVisitor {
     List<Expression> varargsCopy = Lists.newArrayList(varargs);
     varargs.clear();
     if (varargsCopy.isEmpty()) {
-      args.add(new ArrayCreation(lastParam, 0));
+      args.add(new ArrayCreation(lastParam.getErasure(), typeEnv, 0));
     } else {
-      ArrayInitializer newInit = new ArrayInitializer(lastParam);
+      ArrayInitializer newInit = new ArrayInitializer(lastParam.getErasure());
       newInit.getExpressions().addAll(varargsCopy);
       args.add(new ArrayCreation(newInit));
     }
@@ -77,7 +81,7 @@ public class VarargsRewriter extends TreeVisitor {
   @Override
   public void endVisit(ArrayInitializer node) {
     if (!(node.getParent() instanceof ArrayCreation)) {
-      ArrayCreation newArray = new ArrayCreation(node.getTypeBinding());
+      ArrayCreation newArray = new ArrayCreation(node.getTypeBinding(), typeEnv);
       node.replaceWith(newArray);
       newArray.setInitializer(node);
     }

@@ -48,7 +48,7 @@ public class DebugASTPrinter extends TreeVisitor {
     printModifiers(node.getModifiers());
     sb.print("@interface ");
     node.getName().accept(this);
-    sb.print(" {");
+    sb.println(" {");
     sb.indent();
     for (BodyDeclaration decl : node.getBodyDeclarations()) {
       decl.accept(this);
@@ -125,6 +125,7 @@ public class DebugASTPrinter extends TreeVisitor {
         sb.print(',');
       }
     }
+    sb.print('}');
     return false;
   }
 
@@ -222,7 +223,7 @@ public class DebugASTPrinter extends TreeVisitor {
     node.getType().accept(this);
     sb.print("(");
     for (Iterator<Expression> it = node.getArguments().iterator(); it.hasNext(); ) {
-      Expression e = (Expression) it.next();
+      Expression e = it.next();
       e.accept(this);
       if (it.hasNext()) {
         sb.print(',');
@@ -232,6 +233,20 @@ public class DebugASTPrinter extends TreeVisitor {
     if (node.getAnonymousClassDeclaration() != null) {
       node.getAnonymousClassDeclaration().accept(this);
     }
+    return false;
+  }
+
+  @Override
+  public boolean visit(CommaExpression node) {
+    sb.print('(');
+    for (Iterator<Expression> it = node.getExpressions().iterator(); it.hasNext(); ) {
+      Expression e = it.next();
+      e.accept(this);
+      if (it.hasNext()) {
+        sb.print(", ");
+      }
+    }
+    sb.print(')');
     return false;
   }
 
@@ -438,7 +453,11 @@ public class DebugASTPrinter extends TreeVisitor {
       }
     }
     sb.print(')');
-    node.getBody().accept(this);
+    if (node.getBody() == null) {
+      sb.print(';');
+    } else {
+      node.getBody().accept(this);
+    }
     return false;
   }
 
@@ -590,6 +609,22 @@ public class DebugASTPrinter extends TreeVisitor {
       }
     }
     sb.print(')');
+    return false;
+  }
+
+  @Override
+  public boolean visit(NativeDeclaration node) {
+    if (node.getImplementationCode() != null) {
+      sb.println(node.getImplementationCode());
+    } else if (node.getHeaderCode() != null) {
+      sb.println(node.getHeaderCode());
+    }
+    return false;
+  }
+
+  @Override
+  public boolean visit(NativeExpression node) {
+    sb.println(node.getCode());
     return false;
   }
 

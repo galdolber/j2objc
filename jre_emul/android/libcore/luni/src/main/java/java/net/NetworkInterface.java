@@ -72,8 +72,8 @@ public final class NetworkInterface extends Object {
         BOOL (^iterator)(struct ifaddrs *)) {
       struct ifaddrs *ap;
       if (getifaddrs(&ap) < 0) {
-        @throw [JavaNetNetworkInterface makeSocketErrnoExceptionWithNSString:@"getifaddrs"
-                                                                     withInt:errno];
+        @throw JavaNetNetworkInterface_makeSocketErrnoExceptionWithNSString_withInt_(
+            @"getifaddrs", errno);
       }
       for (struct ifaddrs *apit = ap; apit != NULL; apit = apit->ifa_next) {
         if (!interfaceName || !strcmp(apit->ifa_name, interfaceName)) {
@@ -395,16 +395,16 @@ public final class NetworkInterface extends Object {
       }
       int sock = socket(AF_INET, SOCK_DGRAM, 0);
       if (sock < 0) {
-        @throw [JavaNetNetworkInterface makeSocketErrnoExceptionWithNSString:@"socket"
-                                                                     withInt:errno];
+        @throw JavaNetNetworkInterface_makeSocketErrnoExceptionWithNSString_withInt_(
+            @"socket", errno);
       }
       struct ifreq ifreq;
       memset(&ifreq, 0, sizeof(struct ifreq));
       strcpy(ifreq.ifr_name, [self->name_ UTF8String]);
       if (ioctl(sock, SIOCGIFMTU, &ifreq) < 0) {
         close(sock);
-        @throw [JavaNetNetworkInterface makeSocketErrnoExceptionWithNSString:@"ioctl"
-                                                                     withInt:errno];
+        @throw JavaNetNetworkInterface_makeSocketErrnoExceptionWithNSString_withInt_(
+            @"ioctl", errno);
       }
       close(sock);
       return ifreq.ifr_mtu;
@@ -476,7 +476,7 @@ public final class NetworkInterface extends Object {
         }
       }
       freeifaddrs(interfaces);
-      return [IOSObjectArray arrayWithNSArray:names type:[IOSClass stringClass]];
+      return [IOSObjectArray arrayWithNSArray:names type:NSString_class_()];
     ]-*/;
 
     private static native int getInterfaceIndex(String interfaceName) /*-[

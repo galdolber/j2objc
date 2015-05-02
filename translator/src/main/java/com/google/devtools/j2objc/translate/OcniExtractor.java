@@ -117,7 +117,7 @@ public class OcniExtractor extends TreeVisitor {
     if (Modifier.isSynchronized(modifiers)) {
       ITypeBinding declaringClass = node.getMethodBinding().getDeclaringClass();
       SynchronizedStatement syncStmt = new SynchronizedStatement(
-          Modifier.isStatic(modifiers) ? new TypeLiteral(declaringClass)
+          Modifier.isStatic(modifiers) ? new TypeLiteral(declaringClass, typeEnv)
           : new ThisExpression(declaringClass));
       syncStmt.setBody(TreeUtil.remove(node.getBody()));
       Block newBody = new Block();
@@ -134,7 +134,9 @@ public class OcniExtractor extends TreeVisitor {
 
   @Override
   public void endVisit(TypeDeclaration node) {
-    visitType(node);
+    if (!node.isInterface()) {
+      visitType(node);
+    }
   }
 
   private void visitType(AbstractTypeDeclaration node) {
@@ -224,9 +226,7 @@ public class OcniExtractor extends TreeVisitor {
         start = text.indexOf("/*-{");
         end = text.lastIndexOf("}-*/");
         if (start != -1 && end > start) {
-          String message = String.format("JSNI comment found: %s:%d",
-              unit.getSourceFileFullPath(), unit.getLineNumber(offset));
-          ErrorUtil.warning(message);
+          ErrorUtil.warning(node, "JSNI comment found");
         }
       }
       return null;

@@ -14,19 +14,32 @@
 
 package com.google.devtools.j2objc.ast;
 
+import com.google.devtools.j2objc.types.Types;
+import com.google.devtools.j2objc.util.NameTable;
+
 /**
  * Base visitor class for the J2ObjC tree.
  */
 public class TreeVisitor {
 
+  protected CompilationUnit unit = null;
+  protected Types typeEnv = null;
+  protected NameTable nameTable = null;
+
   /**
    * Executes this visitor on a specified node.  This entry point should
-   * be used instead of visit(), so exception can be caught and reported.
+   * be used instead of visit(), so that certain state can be initialized.
    *
    * @param node the top-level node to visit.
    */
   public void run(TreeNode node) {
+    unit = TreeUtil.getCompilationUnit(node);
+    typeEnv = unit.getTypeEnv();
+    nameTable = unit.getNameTable();
     node.accept(this);
+    unit = null;
+    typeEnv = null;
+    nameTable = null;
   }
 
   public boolean preVisit(TreeNode node) {
@@ -142,6 +155,12 @@ public class TreeVisitor {
   }
 
   public void endVisit(ClassInstanceCreation node) {}
+
+  public boolean visit(CommaExpression node) {
+    return true;
+  }
+
+  public void endVisit(CommaExpression node) {}
 
   public boolean visit(CompilationUnit node) {
     return true;
@@ -306,6 +325,12 @@ public class TreeVisitor {
   }
 
   public void endVisit(NativeDeclaration node) {}
+
+  public boolean visit(NativeExpression node) {
+    return true;
+  }
+
+  public void endVisit(NativeExpression node) {}
 
   public boolean visit(NativeStatement node) {
     return true;

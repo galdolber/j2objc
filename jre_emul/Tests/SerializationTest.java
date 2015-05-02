@@ -12,6 +12,10 @@
  * limitations under the License.
  */
 
+import junit.framework.TestCase;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -19,11 +23,10 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-
-import junit.framework.TestCase;
+import java.util.Arrays;
 
 /**
- * Basic test to verify serialization support.
+ * Basic tests to verify serialization support.
  *
  * @author Tom Ball
  */
@@ -47,6 +50,9 @@ public class SerializationTest extends TestCase {
       return String.format("%s, %s!", greeting, name);
     }
   }
+
+  static class SerializableClass implements Serializable {}
+  static class NotSerializableClass {}
 
   @Override
   protected void tearDown() throws Exception {
@@ -72,5 +78,50 @@ public class SerializationTest extends TestCase {
     in.close();
     assertEquals("hello, world!", greeting.toString());
     assertEquals(0, greeting2.n);  // 0 because n is transient.
+  }
+
+  public void testArraySerialization() throws Exception {
+    String[] names = new String[] { "tom", "dick", "harry" };
+    assertTrue("array is not Serializable", names instanceof Serializable);
+    assertTrue("array is not instance of Serializable", Serializable.class.isInstance(names));
+    assertTrue("array cannot be assigned to Serializable",
+        Serializable.class.isAssignableFrom(names.getClass()));
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    ObjectOutputStream oos = new ObjectOutputStream(out);
+    oos.writeObject(names);
+    oos.close();
+    ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
+    ObjectInputStream ois = new ObjectInputStream(in);
+    String[] result = (String[]) ois.readObject();
+    ois.close();
+    assertTrue("arrays not equal", Arrays.equals(names, result));
+  }
+
+  // Regression test for https://github.com/google/j2objc/issues/496.
+  public void testSerializingObjectClass() throws Exception {
+    String path = "/tmp/a.object";
+    FileOutputStream fileOut = new FileOutputStream(path);
+    new ObjectOutputStream(fileOut).writeObject(Object.class);
+    FileInputStream fileIn = new FileInputStream(path);
+    assertEquals(Object.class, new ObjectInputStream(fileIn).readObject());
+  }
+
+  // Regression test for https://github.com/google/j2objc/issues/496.
+  public void testSerializingSerializableClass() throws Exception {
+    String path = "/tmp/b.object";
+    FileOutputStream fileOut = new FileOutputStream(path);
+    new ObjectOutputStream(fileOut).writeObject(SerializableClass.class);
+    FileInputStream fileIn = new FileInputStream(path);
+    assertEquals(SerializableClass.class, new ObjectInputStream(fileIn).readObject());
+  }
+
+  // Regression test for https://github.com/google/j2objc/issues/496.
+  public void testSerializingNotSerializableClass() throws Exception {
+    String path = "/tmp/c.object";
+    FileOutputStream fileOut = new FileOutputStream(path);
+    new ObjectOutputStream(fileOut).writeObject(NotSerializableClass.class);
+    FileInputStream fileIn = new FileInputStream(path);
+    assertEquals(NotSerializableClass.class, new ObjectInputStream(fileIn).readObject());
   }
 }

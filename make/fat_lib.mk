@@ -19,6 +19,7 @@
 #   FAT_LIB_COMPILE
 # The including makefile may define the following optional variables:
 #   FAT_LIB_PRECOMPILED_HEADER
+#   FAT_LIB_OSX_FLAGS
 #
 # This file defines the following to be used by the including file:
 #   FAT_LIB_LIBRARY
@@ -39,12 +40,12 @@ FAT_LIB_MACOSX_SDK_DIR := $(shell bash $(J2OBJC_ROOT)/scripts/sysroot_path.sh)
 FAT_LIB_IPHONE_SDK_DIR := $(shell bash $(J2OBJC_ROOT)/scripts/sysroot_path.sh --iphoneos)
 FAT_LIB_SIMULATOR_SDK_DIR := $(shell bash $(J2OBJC_ROOT)/scripts/sysroot_path.sh --iphonesimulator)
 
-FAT_LIB_MACOSX_FLAGS = -isysroot $(FAT_LIB_MACOSX_SDK_DIR)
-FAT_LIB_IPHONE_FLAGS = -arch armv7 -O3 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
-FAT_LIB_IPHONE64_FLAGS = -arch arm64 -O3 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
-FAT_LIB_IPHONEV7S_FLAGS = -arch armv7s -O3 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
-FAT_LIB_SIMULATOR_FLAGS = -arch i386 -O3 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_SIMULATOR_SDK_DIR)
-FAT_LIB_XCODE_FLAGS = $(ARCH_FLAGS) -isysroot $(SDKROOT)
+FAT_LIB_MACOSX_FLAGS = $(FAT_LIB_OSX_FLAGS) -isysroot $(FAT_LIB_MACOSX_SDK_DIR)
+FAT_LIB_IPHONE_FLAGS = -arch armv7 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
+FAT_LIB_IPHONE64_FLAGS = -arch arm64 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
+FAT_LIB_IPHONEV7S_FLAGS = -arch armv7s -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_IPHONE_SDK_DIR)
+FAT_LIB_SIMULATOR_FLAGS = -arch i386 -miphoneos-version-min=5.0 -isysroot $(FAT_LIB_SIMULATOR_SDK_DIR)
+FAT_LIB_XCODE_FLAGS = $(ARCH_FLAGS) -miphoneos-version-min=5.0 -isysroot $(SDKROOT)
 
 ifdef FAT_LIB_PRECOMPILED_HEADER
 ifndef CONFIGURATION_BUILD_DIR
@@ -79,11 +80,13 @@ fat_lib_dependencies:
 define compile_rule
 $(1)/%.o: $(2)/%.m $(3) | fat_lib_dependencies
 	@mkdir -p $$(@D)
-	$(FAT_LIB_COMPILE) $(4) $(5) -MD -c $$< -o $$@
+	@echo compiling '$$<'
+	@$(FAT_LIB_COMPILE) $(4) $(5) -MD -c '$$<' -o '$$@'
 
 $(1)/%.o: $(2)/%.mm $(3) | fat_lib_dependencies
 	@mkdir -p $$(@D)
-	$(FAT_LIB_COMPILE) -x objective-c++ $(4) $(5) -MD -c $$< -o $$@
+	@echo compiling '$$<'
+	@$(FAT_LIB_COMPILE) -x objective-c++ $(4) $(5) -MD -c '$$<' -o '$$@'
 endef
 
 # Generates rule to build precompiled headers file.
@@ -94,7 +97,8 @@ endef
 define compile_pch_rule
 $(1): $(2) | fat_lib_dependencies
 	@mkdir -p $$(@D)
-	$(FAT_LIB_COMPILE) -x objective-c-header $(3) -MD -c $$< -o $$@
+	@echo compiling '$$<'
+	@$(FAT_LIB_COMPILE) -x objective-c-header $(3) -MD -c $$< -o $$@
 endef
 
 # Generates analyze rule.
@@ -103,11 +107,13 @@ endef
 define analyze_rule
 $(FAT_LIB_PLIST_DIR)/%.plist: $(1)/%.m | fat_lib_dependencies
 	@mkdir -p $$(@D)
-	$(FAT_LIB_COMPILE) $(STATIC_ANALYZER_FLAGS) -c $$< -o $$@
+	@echo compiling '$$<'
+	@$(FAT_LIB_COMPILE) $(STATIC_ANALYZER_FLAGS) -c '$$<' -o '$$@'
 
 $(FAT_LIB_PLIST_DIR)/%.plist: $(1)/%.mm | fat_lib_dependencies
 	@mkdir -p $$(@D)
-	$(FAT_LIB_COMPILE) -x objective-c++ $(STATIC_ANALYZER_FLAGS) -c $$< -o $$@
+	@echo compiling '$$<'
+	@$(FAT_LIB_COMPILE) -x objective-c++ $(STATIC_ANALYZER_FLAGS) -c '$$<' -o '$$@'
 endef
 
 $(foreach src_dir,$(FAT_LIB_SOURCE_DIRS),$(eval $(call analyze_rule,$(src_dir))))
@@ -152,10 +158,10 @@ define arch_lib_rule
 
 $(BUILD_DIR)/$(1)-lib$(FAT_LIB_NAME).a: \
     $(J2OBJC_PRECOMPILED_HEADER:%=$(BUILD_DIR)/objs-$(1)/%.pch) \
-    $(FAT_LIB_OBJS:%=$(BUILD_DIR)/objs-$(1)/%)
+    $$(FAT_LIB_OBJS:%=$(BUILD_DIR)/objs-$(1)/%)
 	@echo "Building $$(notdir $$@)"
 	$$(call long_list_to_file,$(BUILD_DIR)/objs-$(1)/fat_lib_objs_list,\
-	  $(FAT_LIB_OBJS:%=$(BUILD_DIR)/objs-$(1)/%))
+	  $$(FAT_LIB_OBJS:%=$(BUILD_DIR)/objs-$(1)/%))
 	@$$(call fat_lib_filtered_libtool,$$@,$(BUILD_DIR)/objs-$(1)/fat_lib_objs_list)
 endef
 

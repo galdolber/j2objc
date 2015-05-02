@@ -49,10 +49,10 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
   public GeneratedMethodBinding(
       IMethodBinding delegate, String name, int modifiers, ITypeBinding returnType,
       IMethodBinding methodDeclaration, ITypeBinding declaringClass, boolean isConstructor,
-      boolean varargs, boolean isSynthetic) {
+      boolean varargs) {
     this.delegate = delegate;
     this.name = Preconditions.checkNotNull(name);
-    this.modifiers = isSynthetic ? modifiers | BindingUtil.ACC_SYNTHETIC : modifiers;
+    this.modifiers = modifiers;
     this.returnType = returnType;
     this.methodDeclaration = methodDeclaration;
     this.declaringClass = declaringClass;
@@ -65,27 +65,21 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
    */
   public GeneratedMethodBinding(IMethodBinding m) {
     this(null, m.getName(), m.getModifiers(), m.getReturnType(), null, m.getDeclaringClass(),
-        m.isConstructor(), m.isVarargs(), m.isSynthetic());
+        m.isConstructor(), m.isVarargs());
     addParameters(m);
   }
 
   public static GeneratedMethodBinding newMethod(
       String name, int modifiers, ITypeBinding returnType, ITypeBinding declaringClass) {
     return new GeneratedMethodBinding(
-        null, name, modifiers, returnType, null, declaringClass, false, false, true);
+        null, name, modifiers, returnType, null, declaringClass, false, false);
   }
 
-  public static GeneratedMethodBinding newConstructor(ITypeBinding clazz, int modifiers) {
+  public static GeneratedMethodBinding newConstructor(
+      ITypeBinding clazz, int modifiers, Types typeEnv) {
     return new GeneratedMethodBinding(
-        null, NameTable.INIT_NAME, modifiers, Types.mapTypeName("void"), null, clazz, true, false,
+        null, NameTable.INIT_NAME, modifiers, typeEnv.mapTypeName("void"), null, clazz, true,
         false);
-  }
-
-  public static GeneratedMethodBinding newOverridingMethod(
-      IMethodBinding m, ITypeBinding declaringClass, int modifiers) {
-    return new GeneratedMethodBinding(
-        m, m.getName(), modifiers, m.getReturnType(), null, declaringClass,
-        m.isConstructor(), m.isVarargs(), m.isSynthetic());
   }
 
   @Override
@@ -166,6 +160,10 @@ public class GeneratedMethodBinding extends AbstractBinding implements IMethodBi
 
   public void addParameters(IMethodBinding method) {
     parameters.addAll(Arrays.asList(method.getParameterTypes()));
+  }
+
+  public List<ITypeBinding> getParameters() {
+    return parameters;
   }
 
   @Override

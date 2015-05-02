@@ -19,37 +19,9 @@
 
 include environment.mk
 
-JAVA_SOURCES = \
-    javax/annotation/CheckForNull.java \
-    javax/annotation/CheckForSigned.java \
-    javax/annotation/CheckReturnValue.java \
-    javax/annotation/concurrent/GuardedBy.java \
-    javax/annotation/concurrent/Immutable.java \
-    javax/annotation/concurrent/NotThreadSafe.java \
-    javax/annotation/concurrent/ThreadSafe.java \
-    javax/annotation/Detainted.java \
-    javax/annotation/MatchesPattern.java \
-    javax/annotation/meta/Exclusive.java \
-    javax/annotation/meta/Exhaustive.java \
-    javax/annotation/meta/TypeQualifier.java \
-    javax/annotation/meta/TypeQualifierDefault.java \
-    javax/annotation/meta/TypeQualifierNickname.java \
-    javax/annotation/meta/TypeQualifierValidator.java \
-    javax/annotation/meta/When.java \
-    javax/annotation/Nonnegative.java \
-    javax/annotation/Nonnull.java \
-    javax/annotation/Nullable.java \
-    javax/annotation/OverridingMethodsMustInvokeSuper.java \
-    javax/annotation/ParametersAreNonnullByDefault.java \
-    javax/annotation/PropertyKey.java \
-    javax/annotation/RegEx.java \
-    javax/annotation/Signed.java \
-    javax/annotation/Syntax.java \
-    javax/annotation/Tainted.java \
-    javax/annotation/Untainted.java \
-    javax/annotation/WillClose.java \
-    javax/annotation/WillCloseWhenClosed.java \
-    javax/annotation/WillNotClose.java
+# Python command to convert sources list in constants.bzl
+BZL_CMD = 'execfile("constants.bzl"); print " ".join(CONSTANTS_JSR_305_PATHS)'
+JAVA_SOURCES = $(shell python -c $(BZL_CMD))
 
 EXTRACTED_JAVA = $(JAVA_SOURCES:%=$(JAVA_SRC_DIR)/%)
 JAVA_SOURCES_MANIFEST = $(BUILD_DIR)/java_sources.mf
@@ -61,7 +33,7 @@ include ../make/create_jar.mk
 
 TRANSLATE_JAVA_FULL = $(JAVA_SOURCES:%=$(JAVA_SRC_DIR)/%)
 TRANSLATE_JAVA_RELATIVE = $(JAVA_SOURCES)
-TRANSLATE_ARGS = -sourcepath $(JAVA_SRC_DIR)
+TRANSLATE_ARGS = -sourcepath $(JAVA_SRC_DIR) -q
 include ../make/translate.mk
 
 ARCH_HEADERS = $(TRANSLATE_HEADERS:$(GEN_OBJC_DIR)/%=$(ARCH_INCLUDE_DIR)/%)

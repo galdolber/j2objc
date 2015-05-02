@@ -62,11 +62,21 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(source, "Example", "Example.h");
     assertWarningCount(2);
 
-    // Verify JSNI method is declared in a native methods category,
-    // the ocni method is implemented and the jsni method is not implemented.
-    assertTranslation(translation, "@interface Example (NativeMethods)\n- (void)test2");
+    // Verify both methods are declared in the header. The OCNI method is
+    // implemented in the source. The JSNI implementation wraps an unimplemented
+    // function.
+    assertTranslation(translation, "- (void)test1;");
+    assertTranslation(translation, "- (void)test2;");
     translation = getTranslatedFile("Example.m");
-    assertTranslation(translation, "ocni();");
+    assertTranslatedLines(translation,
+        "- (void)test1 {",
+        "  ocni();",
+        "}");
+    assertTranslation(translation, "void Example_test2(Example *self);");
+    assertTranslatedLines(translation,
+        "- (void)test2 {",
+        "  Example_test2(self);",
+        "}");
     assertNotInTranslation(translation, "jsni();");
     assertNotInTranslation(translation, "jsni-comment;");
 
@@ -76,21 +86,22 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
     translation = translateSourceFile(source, "Example", "Example.h");
     assertWarningCount(0);
 
-    // Verify JSNI method is still declared in a native methods category,
-    // and implementation wasn't affected.
-    assertTranslation(translation, "@interface Example (NativeMethods)\n- (void)test2");
+    // Verify header and source file are not affected.
+    assertTranslation(translation, "- (void)test1;");
+    assertTranslation(translation, "- (void)test2;");
     translation = getTranslatedFile("Example.m");
     assertTranslation(translation, "ocni();");
-    assertFalse(translation.contains("jsni();"));
+    assertTranslation(translation, "Example_test2(self);");
+    assertNotInTranslation(translation, "jsni();");
     assertNotInTranslation(translation, "jsni-comment;");
   }
 
   public void testStaticAccessorsAdded() throws IOException {
     String header = translateSourceFile("class Test {"
-        + " private static int foo;"
-        + " private static final int finalFoo = 12;"
-        + " private static String bar;"
-        + " private static final String finalBar = \"test\";"
+        + " static int foo;"
+        + " static final int finalFoo = 12;"
+        + " static String bar;"
+        + " static final String finalBar = \"test\";"
         + " }", "Test", "Test.h");
     assertTranslation(header, "#define Test_finalFoo 12");
     assertTranslation(header, "J2OBJC_STATIC_FIELD_GETTER(Test, foo_, jint)");
@@ -101,11 +112,27 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
     assertNotInTranslation(header, "J2OBJC_STATIC_FIELD_SETTER(Test, finalBar_, NSString *)");
   }
 
+  public void testPrivateStaticAccessorsAdded() throws IOException {
+    String translation = translateSourceFile("class Test {"
+        + " private static int foo;"
+        + " private static final int finalFoo = 12;"
+        + " private static String bar;"
+        + " private static final String finalBar = \"test\";"
+        + " }", "Test", "Test.m");
+    assertTranslation(translation, "#define Test_finalFoo 12");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_GETTER(Test, foo_, jint)");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_REF_GETTER(Test, foo_, jint)");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_GETTER(Test, bar_, NSString *)");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_SETTER(Test, bar_, NSString *)");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_GETTER(Test, finalBar_, NSString *)");
+    assertNotInTranslation(translation, "J2OBJC_STATIC_FIELD_SETTER(Test, finalBar_, NSString *)");
+  }
+
   public void testStaticReaderAddedWhenSameMethodNameExists() throws IOException {
     String translation = translateSourceFile(
-        "class Test { private static int foo; void foo(String s) {}}", "Test", "Test.h");
-    assertTranslation(translation, "J2OBJC_STATIC_FIELD_GETTER(Test, foo__, jint)");
-    assertTranslation(translation, "J2OBJC_STATIC_FIELD_REF_GETTER(Test, foo__, jint)");
+        "class Test { static int foo; void foo(String s) {}}", "Test", "Test.h");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_GETTER(Test, foo_, jint)");
+    assertTranslation(translation, "J2OBJC_STATIC_FIELD_REF_GETTER(Test, foo_, jint)");
     assertTranslation(translation, "- (void)fooWithNSString:(NSString *)s;");
   }
 
@@ -146,7 +173,7 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
   }
 
   public void testNoPrivateMethodHiding() throws IOException {
-    Options.resetHidePrivateMembers();
+    Options.setHidePrivateMembers(false);
     String translation = translateSourceFile(
         "class Test  { public void test1() {} private void test2() {} }", "Test", "Test.h");
     assertTranslation(translation, "- (void)test1;");
@@ -170,7 +197,7 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
   }
 
   public void testNoPrivateFieldHiding() throws IOException {
-    Options.resetHidePrivateMembers();
+    Options.setHidePrivateMembers(false);
     String translation = translateSourceFile(
         "class Test  { public Object o1; protected Object o2; Object o3; private Object o4; }",
         "Test", "Test.h");
@@ -182,5 +209,16 @@ public class ObjectiveCSourceFileGeneratorTest extends GenerationTest {
     translation = getTranslatedFile("Test.m");
     assertNotInTranslation(translation, "id o4_;");
     assertNotInTranslation(translation, "J2OBJC_FIELD_SETTER(Test, o4_, id)");
+  }
+
+  public void testSortingOfGenericTypes() throws IOException {
+    String translation = translateSourceFile(
+        "class Test { static class Inner1 extends Inner2<String> {} static class Inner2<T> {} }",
+        "Test", "Test.h");
+    String inner1 = "@interface Test_Inner1";
+    String inner2 = "@interface Test_Inner2";
+    assertTranslation(translation, inner1);
+    assertTranslation(translation, inner2);
+    assertTrue(translation.indexOf(inner2) < translation.indexOf(inner1));
   }
 }

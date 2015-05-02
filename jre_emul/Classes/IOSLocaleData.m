@@ -29,7 +29,7 @@
   NSLocale *locale = [[NSLocale alloc] initWithLocaleIdentifier:localeId];
   NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
   [dateFormatter setLocale:locale];
-  IOSClass *stringClass = [NSString getClass];
+  IOSClass *stringClass = NSString_class_();
 
   IOSObjectArray *amPm = [IOSObjectArray arrayWithLength:2 type:stringClass];
   [amPm replaceObjectAtIndex:0 withObject:[dateFormatter AMSymbol]];
@@ -187,10 +187,10 @@
   NSCalendar *calendar = [NSCalendar currentCalendar];
   NSLocale *currentLocale = [calendar locale];
   [calendar setLocale:locale];
-  JavaLangInteger *firstWeekday = [JavaLangInteger valueOfWithInt:(int) [calendar firstWeekday]];
+  JavaLangInteger *firstWeekday = JavaLangInteger_valueOfWithInt_((int) [calendar firstWeekday]);
   LibcoreIcuLocaleData_set_firstDayOfWeek_(result, firstWeekday);
   JavaLangInteger *minimalDays =
-      [JavaLangInteger valueOfWithInt:(int) [calendar minimumDaysInFirstWeek]];
+      JavaLangInteger_valueOfWithInt_((int) [calendar minimumDaysInFirstWeek]);
   LibcoreIcuLocaleData_set_minimalDaysInFirstWeek_(result, minimalDays);
   [calendar setLocale:currentLocale];
 

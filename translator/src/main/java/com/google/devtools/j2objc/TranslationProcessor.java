@@ -14,9 +14,9 @@
 
 package com.google.devtools.j2objc;
 
-import com.google.common.collect.Sets;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.devtools.j2objc.ast.CompilationUnit;
-import com.google.devtools.j2objc.ast.TreeConverter;
+import com.google.devtools.j2objc.gen.GenerationUnit;
 import com.google.devtools.j2objc.gen.ObjectiveCHeaderGenerator;
 import com.google.devtools.j2objc.gen.ObjectiveCImplementationGenerator;
 import com.google.devtools.j2objc.gen.ObjectiveCSegmentedHeaderGenerator;
@@ -27,7 +27,7 @@ import com.google.devtools.j2objc.translate.Autoboxer;
 import com.google.devtools.j2objc.translate.CastResolver;
 import com.google.devtools.j2objc.translate.ComplexExpressionExtractor;
 import com.google.devtools.j2objc.translate.ConstantBranchPruner;
-import com.google.devtools.j2objc.translate.CopyAllFieldsWriter;
+import com.google.devtools.j2objc.translate.DeadCodeEliminator;
 import com.google.devtools.j2objc.translate.DestructorGenerator;
 import com.google.devtools.j2objc.translate.EnhancedForRewriter;
 import com.google.devtools.j2objc.translate.EnumRewriter;
@@ -35,15 +35,17 @@ import com.google.devtools.j2objc.translate.Functionizer;
 import com.google.devtools.j2objc.translate.GwtConverter;
 import com.google.devtools.j2objc.translate.InitializationNormalizer;
 import com.google.devtools.j2objc.translate.InnerClassExtractor;
+import com.google.devtools.j2objc.translate.JavaCloneWriter;
 import com.google.devtools.j2objc.translate.JavaToIOSMethodTranslator;
 import com.google.devtools.j2objc.translate.NilCheckResolver;
 import com.google.devtools.j2objc.translate.OcniExtractor;
 import com.google.devtools.j2objc.translate.OperatorRewriter;
 import com.google.devtools.j2objc.translate.OuterReferenceFixer;
 import com.google.devtools.j2objc.translate.OuterReferenceResolver;
+import com.google.devtools.j2objc.translate.PrivateDeclarationResolver;
 import com.google.devtools.j2objc.translate.Rewriter;
 import com.google.devtools.j2objc.translate.StaticVarRewriter;
-import com.google.devtools.j2objc.translate.TypeSorter;
+import com.google.devtools.j2objc.translate.SuperMethodInvocationRewriter;
 import com.google.devtools.j2objc.translate.UnsequencedExpressionRewriter;
 import com.google.devtools.j2objc.translate.VarargsRewriter;
 import com.google.devtools.j2objc.translate.VariableRenamer;
@@ -51,97 +53,93 @@ import com.google.devtools.j2objc.types.HeaderImportCollector;
 import com.google.devtools.j2objc.types.IOSTypeBinding;
 import com.google.devtools.j2objc.types.ImplementationImportCollector;
 import com.google.devtools.j2objc.types.Import;
+import com.google.devtools.j2objc.util.DeadCodeMap;
 import com.google.devtools.j2objc.util.ErrorUtil;
+import com.google.devtools.j2objc.util.FileUtil;
 import com.google.devtools.j2objc.util.JdtParser;
 import com.google.devtools.j2objc.util.TimeTracker;
 
 import org.eclipse.jdt.core.dom.ITypeBinding;
 
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayDeque;
+import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Queue;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /**
  * Processes source files by translating each source into an Objective-C header
  * and an Objective-C source file.
  *
- * @author Tom Ball, Keith Stanger
+ * @author Tom Ball, Keith Stanger, Mike Thvedt
  */
 class TranslationProcessor extends FileProcessor {
 
   private static final Logger logger = Logger.getLogger(TranslationProcessor.class.getName());
 
-  Queue<String> pendingFiles = new ArrayDeque<String>();
-  // Relative paths of files that have been processed.
-  Set<String> processedFiles = Sets.newHashSet();
-  // Relative paths of files that have either been processed or added to pendingfiles.
-  Set<String> seenFiles = Sets.newHashSet();
+  private final DeadCodeMap deadCodeMap;
 
-  public TranslationProcessor(JdtParser parser) {
+  private int processedCount = 0;
+
+  public TranslationProcessor(JdtParser parser, DeadCodeMap deadCodeMap) {
     super(parser);
+    this.deadCodeMap = deadCodeMap;
   }
 
   @Override
-  public void processFiles(Iterable<String> files) {
-    super.processFiles(files);
-    if (Options.buildClosure()) {
-      while (!pendingFiles.isEmpty()) {
-        String file = pendingFiles.remove();
-        if (!processedFiles.contains(file)) {
-          processFile(file);
+  protected void processConvertedTree(ProcessingContext input, CompilationUnit unit) {
+    GenerationUnit genUnit = input.getGenerationUnit();
+    genUnit.addCompilationUnit(unit);
+
+    if (genUnit.isFullyParsed()) {
+      logger.finest("Processing compiled unit " + genUnit.getName()
+          + " of size " + genUnit.getCompilationUnits().size());
+      processCompiledGenerationUnit(genUnit);
+    }
+  }
+
+  protected void processCompiledGenerationUnit(GenerationUnit unit) {
+    assert unit.getOutputPath() != null;
+    assert unit.isFullyParsed();
+    TimeTracker ticker = getTicker(unit.getOutputPath());
+    ticker.push();
+    try {
+      if (logger.isLoggable(Level.INFO)) {
+        System.out.println("translating " + unit.getSourceName());
+      }
+
+      for (CompilationUnit compUnit : unit.getCompilationUnits()) {
+        applyMutations(compUnit, deadCodeMap, ticker);
+        ticker.tick("Tree mutations for " + compUnit.getMainTypeName());
+        processedCount++;
+      }
+
+      logger.finest("writing output file(s) to " + Options.getOutputDirectory().getAbsolutePath());
+
+      generateObjectiveCSource(unit, ticker);
+      ticker.tick("Source generation");
+
+      if (closureQueue != null) {
+        // Add out-of-date dependencies to translation list.
+        for (CompilationUnit compilationUnit : unit.getCompilationUnits()) {
+          checkDependencies(compilationUnit);
         }
       }
+
+      OuterReferenceResolver.cleanup();
+    } finally {
+      unit.finished();
+      ticker.pop();
+      ticker.tick("Total processing time");
+      ticker.printResults(System.out);
     }
-  }
-
-  @Override
-  protected void processSource(String path, String source) {
-    if (logger.isLoggable(Level.INFO)) {
-      System.out.println("translating " + path);
-    }
-    super.processSource(path, source);
-  }
-
-  @Override
-  protected void processUnit(
-      String path, String source, org.eclipse.jdt.core.dom.CompilationUnit unit,
-      TimeTracker ticker) {
-    String relativePath = getRelativePath(path, unit);
-    processedFiles.add(relativePath);
-    seenFiles.add(relativePath);
-
-    CompilationUnit newUnit = TreeConverter.convertCompilationUnit(unit, path, source);
-
-    applyMutations(newUnit, ticker);
-    ticker.tick("Tree mutations");
-
-    if (unit.types().isEmpty() && !newUnit.getMainTypeName().endsWith("package_info")) {
-      logger.finest("skipping dead file " + path);
-      return;
-    }
-
-    logger.finest("writing output file(s) to " + Options.getOutputDirectory().getAbsolutePath());
-
-    generateObjectiveCSource(newUnit, ticker);
-    ticker.tick("Source generation");
-
-    if (Options.buildClosure()) {
-      // Add out-of-date dependencies to translation list.
-      checkDependencies(newUnit);
-    }
-
-    OuterReferenceResolver.cleanup();
   }
 
   /**
@@ -152,8 +150,14 @@ class TranslationProcessor extends FileProcessor {
    * also modified to add support for iOS memory management, extract inner
    * classes, etc.
    */
-  public static void applyMutations(CompilationUnit unit, TimeTracker ticker) {
+  public static void applyMutations(
+      CompilationUnit unit, DeadCodeMap deadCodeMap, TimeTracker ticker) {
     ticker.push();
+
+    if (deadCodeMap != null) {
+      new DeadCodeEliminator(unit, deadCodeMap).run(unit);
+      ticker.tick("DeadCodeEliminator");
+    }
 
     OuterReferenceResolver.resolve(unit);
     ticker.tick("OuterReferenceResolver");
@@ -210,19 +214,14 @@ class TranslationProcessor extends FileProcessor {
     new VarargsRewriter().run(unit);
     ticker.tick("VarargsRewriter");
 
-    // Reorders the types so that superclasses are declared before classes that
-    // extend them.
-    TypeSorter.sortTypes(unit);
-    ticker.tick("TypeSorter");
-
     // Add dealloc/finalize method(s), if necessary.  This is done
     // after inner class extraction, so that each class releases
     // only its own instance variables.
     new DestructorGenerator().run(unit);
     ticker.tick("DestructorGenerator");
 
-    new CopyAllFieldsWriter().run(unit);
-    ticker.tick("CopyAllFieldsWriter");
+    new JavaCloneWriter().run(unit);
+    ticker.tick("JavaCloneWriter");
 
     new ConstantBranchPruner().run(unit);
     ticker.tick("ConstantBranchPruner");
@@ -230,23 +229,27 @@ class TranslationProcessor extends FileProcessor {
     new OcniExtractor(unit).run(unit);
     ticker.tick("OcniExtractor");
 
-    // After: OcniExtractor - So that native methods can be correctly
+    // Before: Functionizer - Edits constructor invocations before they are
     //   functionized.
-    if (Options.finalMethodsAsFunctions()) {
-      new Functionizer().run(unit);
-      ticker.tick("Functionizer");
-    }
+    new EnumRewriter().run(unit);
+    ticker.tick("EnumRewriter");
 
-    // After: Functionizer - Changes bindings on MethodDeclaration nodes.
+    // Before: Functionizer - Needs to rewrite some ClassInstanceCreation nodes
+    //   before Functionizer does.
     // Before: StaticVarRewriter, OperatorRewriter - Doesn't know how to handle
     //   the hasRetainedResult flag on ClassInstanceCreation nodes.
-    Map<String, String> methodMappings = Options.getMethodMappings();
-    if (methodMappings.isEmpty()) {
-      // Method maps are loaded here so tests can call translate() directly.
-      loadMappingFiles();
-    }
-    new JavaToIOSMethodTranslator(methodMappings).run(unit);
+    new JavaToIOSMethodTranslator().run(unit);
     ticker.tick("JavaToIOSMethodTranslator");
+
+    // After: OcniExtractor - So that native methods can be correctly
+    //   functionized.
+    new Functionizer().run(unit);
+    ticker.tick("Functionizer");
+
+    // After: OuterReferenceFixer, Functionizer - Those passes edit the
+    //   qualifier on SuperMethodInvocation nodes.
+    new SuperMethodInvocationRewriter().run(unit);
+    ticker.tick("SuperMethodInvocationRewriter");
 
     new StaticVarRewriter().run(unit);
     ticker.tick("StaticVarRewriter");
@@ -259,9 +262,6 @@ class TranslationProcessor extends FileProcessor {
     new ArrayRewriter().run(unit);
     ticker.tick("ArrayRewriter");
 
-    new EnumRewriter().run(unit);
-    ticker.tick("EnumRewriter");
-
     // Breaks up deeply nested expressions such as chained method calls.
     // Should be one of the last translations because other mutations will
     // affect how deep the expressions are.
@@ -273,9 +273,10 @@ class TranslationProcessor extends FileProcessor {
     new CastResolver().run(unit);
     ticker.tick("CastResolver");
 
-    for (Plugin plugin : Options.getPlugins()) {
-      plugin.processUnit(unit);
-    }
+    // After: InnerClassExtractor, Functionizer - Expects all types to be
+    //   top-level and functionizing to have occured.
+    new PrivateDeclarationResolver().run(unit);
+    ticker.tick("PrivateDeclarationResolver");
 
     // Make sure we still have a valid AST.
     unit.validate();
@@ -283,7 +284,8 @@ class TranslationProcessor extends FileProcessor {
     ticker.pop();
   }
 
-  public static void generateObjectiveCSource(CompilationUnit unit, TimeTracker ticker) {
+  @VisibleForTesting
+  public static void generateObjectiveCSource(GenerationUnit unit, TimeTracker ticker) {
     ticker.push();
 
     // write header
@@ -301,12 +303,16 @@ class TranslationProcessor extends FileProcessor {
     ticker.pop();
   }
 
+  protected void handleError(ProcessingContext input) {
+    // Causes the generation unit to release any trees it was holding.
+    input.getGenerationUnit().failed();
+  }
+
   public void postProcess() {
-    for (Plugin plugin : Options.getPlugins()) {
-      plugin.endProcessing(Options.getOutputDirectory());
-    }
+    printHeaderMappings();
+
     if (logger.isLoggable(Level.INFO)) {
-      int nFiles = processedFiles.size();
+      int nFiles = processedCount;
       System.out.println(String.format(
           "Translated %d %s: %d errors, %d warnings",
           nFiles, nFiles == 1 ? "file" : "files", ErrorUtil.errorCount(),
@@ -319,7 +325,8 @@ class TranslationProcessor extends FileProcessor {
   }
 
   private void checkDependencies(CompilationUnit unit) {
-    HeaderImportCollector hdrCollector = new HeaderImportCollector();
+    HeaderImportCollector hdrCollector =
+        new HeaderImportCollector(HeaderImportCollector.Filter.INCLUDE_ALL);
     hdrCollector.collect(unit);
     ImplementationImportCollector implCollector = new ImplementationImportCollector();
     implCollector.collect(unit);
@@ -327,144 +334,72 @@ class TranslationProcessor extends FileProcessor {
     imports.addAll(hdrCollector.getSuperTypes());
     imports.addAll(implCollector.getImports());
     for (Import imp : imports) {
-      maybeAddToClosure(imp.getType());
+      ITypeBinding type = imp.getMainType();
+      // Ignore core types.
+      if (!(type instanceof IOSTypeBinding)) {
+        closureQueue.addName(type.getErasure().getQualifiedName());
+      }
     }
   }
 
-  private void maybeAddToClosure(ITypeBinding type) {
-    if (type instanceof IOSTypeBinding) {
-      return;  // Ignore core types.
+  private TimeTracker getTicker(String name) {
+    if (logger.isLoggable(Level.FINEST)) {
+      return TimeTracker.start(name);
+    } else {
+      return TimeTracker.noop();
     }
-    String typeName = type.getErasure().getQualifiedName();
-    String sourceName = typeName.replace('.', File.separatorChar) + ".java";
-    if (seenFiles.contains(sourceName)) {
-      return;
-    }
-    seenFiles.add(sourceName);
-
-    // Check if source file exists.
-    String originalTypeName = typeName;
-    File sourceFile = findSourceFile(sourceName);
-    while (sourceFile == null && !sourceName.isEmpty()) {
-      // Check if class exists on classpath.
-      if (findClassFile(typeName)) {
-        logger.finest("no source for " + typeName + ", class found");
-        return;
-      }
-      int iDot = typeName.lastIndexOf('.');
-      if (iDot == -1) {
-        ErrorUtil.warning("could not find source path for " + originalTypeName);
-        return;
-      }
-      typeName = typeName.substring(0, iDot);
-      sourceName = typeName.replace('.', File.pathSeparatorChar) + ".java";
-      if (seenFiles.contains(sourceName)) {
-        return;
-      }
-      sourceFile = findSourceFile(sourceName);
-    }
-
-    // Check if the source file is older than the generated header file.
-    File headerSource = new File(Options.getOutputDirectory(), sourceName.replace(".java", ".h"));
-    if (headerSource.exists() && sourceFile.lastModified() < headerSource.lastModified()) {
-      return;
-    }
-    pendingFiles.add(sourceName);
   }
 
-  private File findSourceFile(String path) {
-    for (String sourcePath : Options.getSourcePathEntries()) {
-      File f = findFile(path, sourcePath);
-      if (f != null) {
-        return f;
+  static void printHeaderMappings() {
+    if (Options.getOutputHeaderMappingFile() != null) {
+      Map<String, String> headerMappings = Options.getHeaderMappings();
+      File outputMappingFile = Options.getOutputHeaderMappingFile();
+
+      try {
+        if (!outputMappingFile.exists()) {
+          outputMappingFile.getParentFile().mkdirs();
+          outputMappingFile.createNewFile();
+        }
+        PrintWriter writer = new PrintWriter(outputMappingFile);
+
+        for (String className : headerMappings.keySet()) {
+          writer.println(String.format("%s=%s", className, headerMappings.get(className)));
+        }
+
+        writer.close();
+      } catch (IOException e) {
+        ErrorUtil.error(e.getMessage());
       }
     }
-    return null;
   }
 
-  private boolean findClassFile(String typeName) {
-    // Zip/jar files always use forward slashes.
-    String path = typeName.replace('.', '/') + ".class";
-    for (String classPath : Options.getClassPathEntries()) {
-      File f = findFile(path, classPath);
-      if (f != null) {
-        return true;
-      }
-    }
-    // See if it's a JRE class.
+  static void loadHeaderMappings() {
+    Map<String, String> headerMappings = Options.getHeaderMappings();
+
+    List<String> headerMappingFiles = Options.getHeaderMappingFiles();
+    List<Properties> headerMappingProps = new ArrayList<Properties>();
+
     try {
-      Class.forName(typeName);
-      return true;
-    } catch (ClassNotFoundException e) {
-      // Fall-through.
-    }
-    return false;
-  }
-
-  private File findFile(String path, String sourcePath) {
-    File f = new File(sourcePath);
-    if (f.isDirectory()) {
-      File source = new File(f, path);
-      if (source.exists()) {
-        return source;
-      }
-    } else if (f.isFile() && sourcePath.endsWith(".jar")) {
-      try {
-        ZipFile zfile = new ZipFile(f);
+      if (headerMappingFiles == null) {
         try {
-          ZipEntry entry = zfile.getEntry(path);
-          if (entry != null) {
-            return f;
-          }
-        } finally {
-          zfile.close();
+          headerMappingProps.add(FileUtil.loadProperties(Options.DEFAULT_HEADER_MAPPING_FILE));
+        } catch (FileNotFoundException e) {
+          // Don't fail if mappings aren't configured and the default mapping is absent.
         }
-      } catch (IOException e) {
-        ErrorUtil.warning(e.getMessage());
+      } else {
+        for (String resourceName : headerMappingFiles) {
+          headerMappingProps.add(FileUtil.loadProperties(resourceName));
+        }
       }
+    } catch (IOException e) {
+      ErrorUtil.error(e.getMessage());
     }
-    return null;
-  }
 
-  private static void loadMappingFiles() {
-    for (String resourceName : Options.getMappingFiles()) {
-      Properties mappings = new Properties();
-      try {
-        File f = new File(resourceName);
-        if (f.exists()) {
-          FileReader reader = new FileReader(f);
-          try {
-            mappings.load(reader);
-          } finally {
-            reader.close();
-          }
-        } else {
-          InputStream stream = J2ObjC.class.getResourceAsStream(resourceName);
-          if (stream == null) {
-            ErrorUtil.error(resourceName + " not found");
-          } else {
-            try {
-              mappings.load(stream);
-            } finally {
-              stream.close();
-            }
-          }
-        }
-      } catch (IOException e) {
-        throw new AssertionError(e);
-      }
-
+    for (Properties mappings : headerMappingProps) {
       Enumeration<?> keyIterator = mappings.propertyNames();
       while (keyIterator.hasMoreElements()) {
         String key = (String) keyIterator.nextElement();
-        if (key.indexOf('(') > 0) {
-          // All method mappings have parentheses characters, classes don't.
-          String iosMethod = mappings.getProperty(key);
-          Options.getMethodMappings().put(key, iosMethod);
-        } else {
-          String iosClass = mappings.getProperty(key);
-          Options.getClassMappings().put(key, iosClass);
-        }
+        headerMappings.put(key, mappings.getProperty(key));
       }
     }
   }

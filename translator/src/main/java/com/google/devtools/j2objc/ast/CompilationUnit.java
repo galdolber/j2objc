@@ -16,6 +16,7 @@ package com.google.devtools.j2objc.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.NameTable;
 
 import org.eclipse.jdt.core.dom.ASTNode;
@@ -27,7 +28,9 @@ import java.util.List;
  */
 public class CompilationUnit extends TreeNode {
 
-  private final String sourceFileFullPath;
+  private final Types typeEnv;
+  private final NameTable nameTable;
+  private final String sourceFilePath;
   private final String mainTypeName;
   private final String source;
   private final int[] newlines;
@@ -42,10 +45,12 @@ public class CompilationUnit extends TreeNode {
       ChildList.create(AbstractTypeDeclaration.class, this);
 
   public CompilationUnit(
-      org.eclipse.jdt.core.dom.CompilationUnit jdtNode, String sourceFileFullPath,
-      String mainTypeName, String source) {
+      org.eclipse.jdt.core.dom.CompilationUnit jdtNode, String sourceFilePath,
+      String mainTypeName, String source, NameTable.Factory nameTableFactory) {
     super(jdtNode);
-    this.sourceFileFullPath = Preconditions.checkNotNull(sourceFileFullPath);
+    typeEnv = new Types(jdtNode.getAST());
+    nameTable = nameTableFactory == null ? null : nameTableFactory.newNameTable(typeEnv);
+    this.sourceFilePath = Preconditions.checkNotNull(sourceFilePath);
     Preconditions.checkNotNull(mainTypeName);
     if (mainTypeName.endsWith(NameTable.PACKAGE_INFO_FILE_NAME)) {
       mainTypeName =
@@ -61,11 +66,15 @@ public class CompilationUnit extends TreeNode {
     }
     for (Object comment : jdtNode.getCommentList()) {
       // Comments are not normally parented in the JDT AST. Javadoc nodes are
-      // normally parented by the BodyDeclaration they apply do, so here we only
+      // normally parented by the BodyDeclaration they apply to, so here we only
       // keep the unparented comments to avoid duplicate comment nodes.
       ASTNode commentParent = ((ASTNode) comment).getParent();
       if (commentParent == null || commentParent == jdtNode) {
-        comments.add((Comment) TreeConverter.convert(comment));
+        Comment newComment = (Comment) TreeConverter.convert(comment);
+        // Since the comment is unparented, it's constructor is unable to get
+        // the root CompilationUnit to determine the line number.
+        newComment.setLineNumber(jdtNode.getLineNumber(newComment.getStartPosition()));
+        comments.add(newComment);
       }
     }
     for (Object type : jdtNode.types()) {
@@ -75,7 +84,9 @@ public class CompilationUnit extends TreeNode {
 
   public CompilationUnit(CompilationUnit other) {
     super(other);
-    sourceFileFullPath = other.getSourceFileFullPath();
+    typeEnv = other.getTypeEnv();
+    nameTable = other.getNameTable();
+    sourceFilePath = other.getSourceFilePath();
     mainTypeName = other.getMainTypeName();
     source = other.getSource();
     newlines = new int[other.newlines.length];
@@ -91,8 +102,16 @@ public class CompilationUnit extends TreeNode {
     return Kind.COMPILATION_UNIT;
   }
 
-  public String getSourceFileFullPath() {
-    return sourceFileFullPath;
+  public Types getTypeEnv() {
+    return typeEnv;
+  }
+
+  public NameTable getNameTable() {
+    return nameTable;
+  }
+
+  public String getSourceFilePath() {
+    return sourceFilePath;
   }
 
   public String getMainTypeName() {
@@ -194,7 +213,7 @@ public class CompilationUnit extends TreeNode {
   @Override
   public void validateInner() {
     super.validateInner();
-    Preconditions.checkNotNull(sourceFileFullPath);
+    Preconditions.checkNotNull(sourceFilePath);
     Preconditions.checkNotNull(mainTypeName);
     Preconditions.checkNotNull(source);
     Preconditions.checkNotNull(packageDeclaration);

@@ -33,11 +33,11 @@ import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TreeVisitor;
 import com.google.devtools.j2objc.types.GeneratedMethodBinding;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
-import com.google.devtools.j2objc.types.Types;
-import com.google.devtools.j2objc.util.NameTable;
+import com.google.devtools.j2objc.util.BindingUtil;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
+import org.eclipse.jdt.core.dom.Modifier;
 
 import java.util.List;
 
@@ -51,13 +51,10 @@ public class EnumRewriter extends TreeVisitor {
   private GeneratedVariableBinding nameVar = null;
   private GeneratedVariableBinding ordinalVar = null;
 
-  private final ITypeBinding stringType = Types.resolveIOSType("NSString");
-  private final ITypeBinding intType = Types.resolveJavaType("int");
-
-  private IMethodBinding addEnumConstructorParams(IMethodBinding method) {
+  private GeneratedMethodBinding addEnumConstructorParams(IMethodBinding method) {
     GeneratedMethodBinding newMethod = new GeneratedMethodBinding(method);
-    newMethod.addParameter(stringType);
-    newMethod.addParameter(intType);
+    newMethod.addParameter(typeEnv.resolveIOSType("NSString"));
+    newMethod.addParameter(typeEnv.resolveJavaType("int"));
     return newMethod;
   }
 
@@ -70,9 +67,9 @@ public class EnumRewriter extends TreeVisitor {
           addEnumConstructorParams(constant.getMethodBinding().getMethodDeclaration());
       ClassInstanceCreation creation = new ClassInstanceCreation(binding);
       TreeUtil.copyList(constant.getArguments(), creation.getArguments());
-      String name = NameTable.getName(constant.getName().getBinding());
-      creation.getArguments().add(new StringLiteral(name));
-      creation.getArguments().add(new NumberLiteral(i++));
+      String name = nameTable.getVariableName(constant.getVariableBinding());
+      creation.getArguments().add(new StringLiteral(name, typeEnv));
+      creation.getArguments().add(new NumberLiteral(i++, typeEnv));
       creation.setHasRetainedResult(true);
       stmts.add(new ExpressionStatement(new Assignment(
           new SimpleName(constant.getVariableBinding()), creation)));
@@ -89,12 +86,19 @@ public class EnumRewriter extends TreeVisitor {
     if (!binding.isConstructor() || !declaringClass.isEnum()) {
       return false;
     }
-    IMethodBinding newBinding = addEnumConstructorParams(node.getMethodBinding());
+    GeneratedMethodBinding newBinding = addEnumConstructorParams(node.getMethodBinding());
     node.setMethodBinding(newBinding);
+    // Enum constructors can't be called other than to create the enum values,
+    // so mark as synthetic to avoid writing the declaration.
+    node.addModifiers(BindingUtil.ACC_SYNTHETIC);
+    node.removeModifiers(Modifier.PUBLIC | Modifier.PROTECTED);
+    node.addModifiers(Modifier.PRIVATE);
+    newBinding.setModifiers((newBinding.getModifiers() & ~(Modifier.PUBLIC | Modifier.PROTECTED))
+        | Modifier.PRIVATE | BindingUtil.ACC_SYNTHETIC);
     nameVar = new GeneratedVariableBinding(
-        "__name", 0, stringType, false, true, declaringClass, newBinding);
+        "__name", 0, typeEnv.resolveIOSType("NSString"), false, true, declaringClass, newBinding);
     ordinalVar = new GeneratedVariableBinding(
-        "__ordinal", 0, intType, false, true, declaringClass, newBinding);
+        "__ordinal", 0, typeEnv.resolveJavaType("int"), false, true, declaringClass, newBinding);
     node.getParameters().add(new SingleVariableDeclaration(nameVar));
     node.getParameters().add(new SingleVariableDeclaration(ordinalVar));
     return true;
@@ -121,26 +125,26 @@ public class EnumRewriter extends TreeVisitor {
     node.getArguments().add(new SimpleName(ordinalVar));
   }
 
-  private static void addExtraNativeDecls(EnumDeclaration node) {
-    String typeName = NameTable.getFullName(node.getTypeBinding());
+  private void addExtraNativeDecls(EnumDeclaration node) {
+    String typeName = nameTable.getFullName(node.getTypeBinding());
     int numConstants = node.getEnumConstants().size();
 
     String header = String.format(
         "+ (IOSObjectArray *)values;\n"
         + "FOUNDATION_EXPORT IOSObjectArray *%s_values();\n\n"
-        + "+ (%s *)valueOfWithNSString:(NSString *)name;\n\n"
-        + "FOUNDATION_EXPORT %s *%s_valueOfWithNSString_(NSString *name);"
+        + "+ (%s *)valueOfWithNSString:(NSString *)name;\n"
+        + "FOUNDATION_EXPORT %s *%s_valueOfWithNSString_(NSString *name);\n\n"
         + "- (id)copyWithZone:(NSZone *)zone;\n", typeName, typeName, typeName, typeName);
 
     StringBuilder sb = new StringBuilder();
     sb.append(String.format(
-        "FOUNDATION_EXPORT IOSObjectArray *%s_values() {\n"
-        + "  return [IOSObjectArray arrayWithObjects:%s_values_ count:%s type:"
-        + "[IOSClass classWithClass:[%s class]]];\n"
-        + "}\n"
+        "IOSObjectArray *%s_values() {\n"
+        + "  %s_initialize();\n"
+        + "  return [IOSObjectArray arrayWithObjects:%s_values_ count:%s type:%s_class_()];\n"
+        + "}\n\n"
         + "+ (IOSObjectArray *)values {\n"
         + "  return %s_values();\n"
-        + "}\n\n", typeName, typeName, numConstants, typeName, typeName));
+        + "}\n\n", typeName, typeName, typeName, numConstants, typeName, typeName));
 
     sb.append(String.format(
         "+ (%s *)valueOfWithNSString:(NSString *)name {\n"
@@ -149,12 +153,13 @@ public class EnumRewriter extends TreeVisitor {
 
     sb.append(String.format(
         "%s *%s_valueOfWithNSString_(NSString *name) {\n"
+            + "  %s_initialize();\n"
             + "  for (int i = 0; i < %s; i++) {\n"
             + "    %s *e = %s_values_[i];\n"
             + "    if ([name isEqual:[e name]]) {\n"
             + "      return e;\n"
             + "    }\n"
-            + "  }\n", typeName, typeName, numConstants, typeName, typeName));
+            + "  }\n", typeName, typeName, typeName, numConstants, typeName, typeName));
     if (Options.useReferenceCounting()) {
       sb.append(
           "  @throw [[[JavaLangIllegalArgumentException alloc] initWithNSString:name]"

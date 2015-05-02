@@ -17,6 +17,8 @@
 
 package java.io;
 
+import com.google.j2objc.annotations.WeakOuter;
+
 import java.io.EmulatedFields.ObjectSlot;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -360,7 +362,7 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
     public ObjectInputStream(InputStream input) throws StreamCorruptedException, IOException {
         this.input = (input instanceof DataInputStream)
                 ? (DataInputStream) input : new DataInputStream(input);
-        primitiveTypes = new DataInputStream(this);
+        primitiveTypes = new DataInputStream(new WeakProxy());
         enableResolve = false;
         this.subclassOverridingImplementation = false;
         resetState();
@@ -556,13 +558,13 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
      *             if {@code buffer} is {@code null}.
      */
     @Override
-    public int read(byte[] buffer, int offset, int length) throws IOException {
-        Arrays.checkOffsetAndCount(buffer.length, offset, length);
-        if (length == 0) {
+    public int read(byte[] buffer, int byteOffset, int byteCount) throws IOException {
+        Arrays.checkOffsetAndCount(buffer.length, byteOffset, byteCount);
+        if (byteCount == 0) {
             return 0;
         }
         checkReadPrimitiveTypes();
-        return primitiveData.read(buffer, offset, length);
+        return primitiveData.read(buffer, byteOffset, byteCount);
     }
 
     /**
@@ -1404,7 +1406,7 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
      * @return the string read from the source stream.
      * @throws IOException
      *             if an error occurs while reading from the source stream.
-     * @deprecated Use {@link BufferedReader}
+     * @deprecated Use {@link BufferedReader} instead.
      */
     @Deprecated
     public String readLine() throws IOException {
@@ -1761,9 +1763,7 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
      */
     protected Class<?> resolveProxyClass(String[] interfaceNames)
             throws IOException, ClassNotFoundException {
-        // TODO: This method is opportunity for performance enhancement
-        //       We can cache the classloader and recently used interfaces.
-        ClassLoader loader = ClassLoader.getSystemClassLoader();
+        ClassLoader loader = callerClassLoader;
         Class<?>[] interfaces = new Class<?>[interfaceNames.length];
         for (int i = 0; i < interfaceNames.length; i++) {
             interfaces[i] = Class.forName(interfaceNames[i], false, loader);
@@ -2372,9 +2372,14 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
 
         if (loadedStreamClass.getSerialVersionUID() != localStreamClass
                 .getSerialVersionUID()) {
+          // java.io.Serializable javadoc states "..., the requirement for
+          // matching serialVersionUID values is waived for array classes."
+          boolean isArray = loadedStreamClass.getName().startsWith("[");
+          if (!isArray) {
             throw new InvalidClassException(loadedStreamClass.getName(),
                     "Incompatible class (SUID): " + loadedStreamClass +
                             " but expected " + localStreamClass);
+          }
         }
 
         String loadedClassBaseName = getBaseName(loadedStreamClass.getName());
@@ -2405,5 +2410,34 @@ public class ObjectInputStream extends InputStream implements ObjectInput, Objec
             throw new StreamCorruptedException();
         }
         desc.setSuperclass(superDesc);
+    }
+
+    /**
+     * This class avoids a reference cycle by proxying calls through to the
+     * outer ObjectInputStream while holding a weak reference to the outer
+     * instance.
+     */
+    @WeakOuter
+    private class WeakProxy extends InputStream {
+
+      @Override
+      public int available() throws IOException {
+        return ObjectInputStream.this.available();
+      }
+
+      @Override
+      public void close() throws IOException {
+        ObjectInputStream.this.close();
+      }
+
+      @Override
+      public int read() throws IOException {
+        return ObjectInputStream.this.read();
+      }
+
+      @Override
+      public int read(byte[] buffer, int byteOffset, int byteCount) throws IOException {
+        return ObjectInputStream.this.read(buffer, byteOffset, byteCount);
+      }
     }
 }

@@ -51,9 +51,9 @@ import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
 import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
 import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
-import com.google.devtools.j2objc.types.Types;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
+import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 
 import java.util.Collections;
@@ -297,10 +297,10 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
 
       // If there's a new modification in a new branch, then we extract an if-statement.
       if (access.isModification && branch != branches.get(lastIfExtractIdx)) {
+        ITypeBinding boolType = typeEnv.resolveJavaType("boolean");
         if (conditionalVar == null) {
           conditionalVar = new GeneratedVariableBinding(
-              "unseq$" + count++, 0, Types.resolveJavaType("boolean"), false, false, null,
-              currentMethod);
+              "unseq$" + count++, 0, boolType, false, false, null, currentMethod);
           conditional.replaceWith(new SimpleName(conditionalVar));
           stmtList.add(new VariableDeclarationStatement(conditionalVar, null));
         }
@@ -310,7 +310,8 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
             new SimpleName(conditionalVar), conditionalFromSubBranches(subBranches, op));
         if (op == InfixExpression.Operator.CONDITIONAL_OR) {
           ifExpr = new PrefixExpression(
-              PrefixExpression.Operator.NOT, ParenthesizedExpression.parenthesize(ifExpr));
+              boolType, PrefixExpression.Operator.NOT,
+              ParenthesizedExpression.parenthesize(ifExpr));
         }
         newIf.setExpression(ifExpr);
         stmtList.add(newIf);
@@ -348,9 +349,9 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
       return branches.get(0).copy();
     } else {
       InfixExpression result = new InfixExpression(
-          Types.resolveJavaType("boolean"), op, branches.get(0).copy(), branches.get(1).copy());
+          typeEnv.resolveJavaType("boolean"), op, branches.get(0).copy(), branches.get(1).copy());
       for (int i = 2; i < branches.size(); i++) {
-        result.getExtendedOperands().add(branches.get(i));
+        result.getExtendedOperands().add(branches.get(i).copy());
       }
       return result;
     }
@@ -420,7 +421,7 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
     if (isWithinConditionalBranch(modification.expression, commonAncestor)
         || isWithinConditionalBranch(access.expression, commonAncestor)) {
       return false;
-    } else if (commonAncestor instanceof Assignment) {
+    } else if (commonAncestor instanceof Assignment && modification.expression == commonAncestor) {
       // "i = 1 + (i = 2);" is not unsequenced.
       // "i = 1 + i++;" is unsequenced (according to clang).
       return access.expression instanceof PrefixExpression
@@ -563,7 +564,8 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
   private IfStatement createLoopTermination(Expression loopCondition) {
     IfStatement newIf = new IfStatement();
     newIf.setExpression(new PrefixExpression(
-        PrefixExpression.Operator.NOT, ParenthesizedExpression.parenthesize(loopCondition.copy())));
+        typeEnv.resolveJavaType("boolean"), PrefixExpression.Operator.NOT,
+        ParenthesizedExpression.parenthesize(loopCondition.copy())));
     newIf.setThenStatement(new BreakStatement());
     return newIf;
   }
@@ -579,7 +581,7 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
       List<Statement> stmtList = TreeUtil.asStatementList(node.getBody()).subList(0, 0);
       extractOrderedAccesses(stmtList, currentTopNode, toExtract);
       stmtList.add(createLoopTermination(node.getExpression()));
-      node.setExpression(new BooleanLiteral(true));
+      node.setExpression(new BooleanLiteral(true, typeEnv));
     }
     return false;
   }
@@ -595,7 +597,7 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
       List<Statement> stmtList = TreeUtil.asStatementList(node.getBody());
       extractOrderedAccesses(stmtList, currentTopNode, toExtract);
       stmtList.add(createLoopTermination(node.getExpression()));
-      node.setExpression(new BooleanLiteral(true));
+      node.setExpression(new BooleanLiteral(true, typeEnv));
     }
     return false;
   }
@@ -683,10 +685,15 @@ public class UnsequencedExpressionRewriter extends TreeVisitor {
 
   @Override
   public boolean visit(Assignment node) {
-    // We can't visit the left hand side otherwise the SimpleName visitor will
-    // add an additional access for the assigned variable.
+    Expression lhs = node.getLeftHandSide();
+    IVariableBinding lhsVar = TreeUtil.getVariableBinding(lhs);
+    // Access order is important. If the lhs is a variable, then we must record
+    // its access after visiting the rhs. Otherwise, visit both sides.
+    if (lhsVar == null) {
+      lhs.accept(this);
+    }
     node.getRightHandSide().accept(this);
-    addVariableAccess(TreeUtil.getVariableBinding(node.getLeftHandSide()), node, true);
+    addVariableAccess(lhsVar, node, true);
     return false;
   }
 

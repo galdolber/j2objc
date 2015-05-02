@@ -43,10 +43,10 @@ import com.google.devtools.j2objc.ast.SwitchStatement;
 import com.google.devtools.j2objc.ast.TreeNode;
 import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TreeVisitor;
+import com.google.devtools.j2objc.ast.Type;
 import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
 import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
-import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.BindingUtil;
 import com.google.devtools.j2objc.util.NameTable;
 
@@ -71,7 +71,7 @@ public class Autoboxer extends TreeVisitor {
    * translated to "Wrapper.valueOf(expr)".
    */
   private Expression box(Expression expr) {
-    ITypeBinding wrapperBinding = Types.getWrapperType(expr.getTypeBinding());
+    ITypeBinding wrapperBinding = typeEnv.getWrapperType(expr.getTypeBinding());
     if (wrapperBinding != null) {
       return newBoxExpression(expr, wrapperBinding);
     } else {
@@ -80,14 +80,14 @@ public class Autoboxer extends TreeVisitor {
   }
 
   private Expression boxWithType(Expression expr, ITypeBinding wrapperType) {
-    if (Types.isBoxedPrimitive(wrapperType)) {
+    if (typeEnv.isBoxedPrimitive(wrapperType)) {
       return newBoxExpression(expr, wrapperType);
     }
     return box(expr);
   }
 
   private Expression newBoxExpression(Expression expr, ITypeBinding wrapperType) {
-    ITypeBinding primitiveType = Types.getPrimitiveType(wrapperType);
+    ITypeBinding primitiveType = typeEnv.getPrimitiveType(wrapperType);
     assert primitiveType != null;
     IMethodBinding wrapperMethod = BindingUtil.findDeclaredMethod(
         wrapperType, VALUEOF_METHOD, primitiveType.getName());
@@ -99,7 +99,7 @@ public class Autoboxer extends TreeVisitor {
 
   private ITypeBinding findWrapperSuperclass(ITypeBinding type) {
     while (type != null) {
-      if (Types.isBoxedPrimitive(type)) {
+      if (typeEnv.isBoxedPrimitive(type)) {
         return type;
       }
       type = type.getSuperclass();
@@ -115,7 +115,7 @@ public class Autoboxer extends TreeVisitor {
    */
   private Expression unbox(Expression expr) {
     ITypeBinding wrapperType = findWrapperSuperclass(expr.getTypeBinding());
-    ITypeBinding primitiveType = Types.getPrimitiveType(wrapperType);
+    ITypeBinding primitiveType = typeEnv.getPrimitiveType(wrapperType);
     if (primitiveType != null) {
       IMethodBinding valueMethod = BindingUtil.findDeclaredMethod(
           wrapperType, primitiveType.getName() + VALUE_METHOD);
@@ -134,7 +134,7 @@ public class Autoboxer extends TreeVisitor {
     ITypeBinding rhType = rhs.getTypeBinding();
     Assignment.Operator op = node.getOperator();
     if (op != Assignment.Operator.ASSIGN && !lhType.isPrimitive()
-        && !lhType.equals(Types.resolveJavaType("java.lang.String"))) {
+        && !lhType.equals(typeEnv.resolveJavaType("java.lang.String"))) {
       // Not a simple assignment; need to break the <operation>-WITH_ASSIGN
       // assignment apart.
       node.setOperator(Assignment.Operator.ASSIGN);
@@ -177,7 +177,7 @@ public class Autoboxer extends TreeVisitor {
     } else {
       throw new IllegalArgumentException();
     }
-    return new InfixExpression(Types.getPrimitiveType(lhType), infixOp, unbox(lhs), unbox(rhs));
+    return new InfixExpression(typeEnv.getPrimitiveType(lhType), infixOp, unbox(lhs), unbox(rhs));
   }
 
   @Override
@@ -214,13 +214,22 @@ public class Autoboxer extends TreeVisitor {
 
   @Override
   public void endVisit(CastExpression node) {
-    Expression expr = boxOrUnboxExpression(node.getExpression(), node.getTypeBinding());
-    if (expr != node.getExpression()) {
+    ITypeBinding type = node.getTypeBinding();
+    Expression expr = node.getExpression();
+    ITypeBinding exprType = expr.getTypeBinding();
+    if (type.isPrimitive() && !exprType.isPrimitive()) {
+      // Casting an object to a primitive. Convert the cast type to the wrapper
+      // so that we do a proper cast check, as Java would.
+      type = typeEnv.getWrapperType(type);
+      node.setType(Type.newType(type));
+    }
+    Expression newExpr = boxOrUnboxExpression(expr, type);
+    if (newExpr != expr) {
       TreeNode parent = node.getParent();
       if (parent instanceof ParenthesizedExpression) {
-        parent.replaceWith(expr);
+        parent.replaceWith(newExpr);
       } else {
-        node.replaceWith(expr);
+        node.replaceWith(newExpr);
       }
     }
   }
@@ -301,7 +310,7 @@ public class Autoboxer extends TreeVisitor {
       return;
     }
     // Don't unbox for string concatenation.
-    if (op == InfixExpression.Operator.PLUS && Types.isJavaStringType(type)) {
+    if (op == InfixExpression.Operator.PLUS && typeEnv.isJavaStringType(type)) {
       return;
     }
 
@@ -351,13 +360,14 @@ public class Autoboxer extends TreeVisitor {
   private void rewriteBoxedPrefixOrPostfix(
       TreeNode node, Expression operand, String methodPrefix) {
     ITypeBinding type = operand.getTypeBinding();
-    if (!Types.isBoxedPrimitive(type)) {
+    if (!typeEnv.isBoxedPrimitive(type)) {
       return;
     }
-    String funcName = methodPrefix + NameTable.capitalize(Types.getPrimitiveType(type).getName());
+    String funcName = methodPrefix + NameTable.capitalize(typeEnv.getPrimitiveType(type).getName());
     FunctionInvocation invocation = new FunctionInvocation(funcName, type, type, type);
     invocation.getArguments().add(new PrefixExpression(
-        PrefixExpression.Operator.ADDRESS_OF, TreeUtil.remove(operand)));
+        typeEnv.getPointerType(type), PrefixExpression.Operator.ADDRESS_OF,
+        TreeUtil.remove(operand)));
     node.replaceWith(invocation);
   }
 

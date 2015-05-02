@@ -49,7 +49,7 @@ jre_emul_java_manifest:
 junit_dist: translator_dist jre_emul_dist
 	@$(MAKE) -C $(J2OBJC_ROOT)/junit dist
 
-junit_java: java_deps_dist annotations_dist
+junit_java: java_deps_dist jre_emul_jar_dist
 	@$(MAKE) -C $(J2OBJC_ROOT)/junit java
 
 junit_manifest:
@@ -64,7 +64,7 @@ javax_inject_dist: translator_dist jre_emul_dist java_deps_dist
 guava_dist: translator_dist jre_emul_dist jsr305_dist
 	@$(MAKE) -C $(J2OBJC_ROOT)/guava dist
 
-guava_java: java_deps_dist annotations_dist
+guava_java: java_deps_dist jre_emul_jar_dist
 	@$(MAKE) -C $(J2OBJC_ROOT)/guava java
 
 guava_manifest:
@@ -81,6 +81,15 @@ mockito_java: java_deps_dist junit_java
 
 mockito_manifest:
 	@$(MAKE) -C $(J2OBJC_ROOT)/testing/mockito java_sources_manifest
+
+protobuf_compiler_dist:
+	@$(MAKE) -C $(J2OBJC_ROOT)/protobuf/compiler dist
+
+protobuf_runtime_java: protobuf_compiler_dist
+	@$(MAKE) -C $(J2OBJC_ROOT)/protobuf/runtime java
+
+protobuf_runtime_dist: jre_emul_dist protobuf_compiler_dist
+	@$(MAKE) -C $(J2OBJC_ROOT)/protobuf/runtime dist
 
 
 else
@@ -104,5 +113,8 @@ cycle_finder_dist:
 mockito_dist:
 mockito_java:
 mockito_manifest:
+protobuf_compiler_dist:
+protobuf_runtime_java:
+protobuf_runtime_dist:
 
 endif

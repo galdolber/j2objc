@@ -16,6 +16,7 @@ package com.google.j2objc.testing;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.j2objc.annotations.AutoreleasePool;
 import com.google.j2objc.annotations.WeakOuter;
 
 import junit.framework.Test;
@@ -44,7 +45,6 @@ import java.util.Random;
 import java.util.Set;
 
 /*-[
-#include <vector>
 #include <objc/runtime.h>
 ]-*/
 
@@ -121,8 +121,12 @@ public class JUnitTestRunner {
   public static int run(Class[] classes, RunListener listener) {
     JUnitCore junitCore = new JUnitCore();
     junitCore.addListener(listener);
-    Result result = junitCore.run(classes);
-    return result.wasSuccessful() ? 0 : 1;
+    boolean hasError = false;
+    for (@AutoreleasePool Class c : classes) {
+      Result result = junitCore.run(c);
+      hasError = hasError || !result.wasSuccessful();
+    }
+    return hasError ? 1 : 0;
   }
 
   /**
@@ -193,12 +197,17 @@ public class JUnitTestRunner {
   /*-[
   // Returns true if |cls| conforms to the NSObject protocol.
   BOOL IsNSObjectClass(Class cls) {
-    while (cls != nil) {
-      if (class_conformsToProtocol(cls, @protocol(NSObject))) {
-        return YES;
+    @try {
+      while (cls != nil) {
+        if (class_conformsToProtocol(cls, @protocol(NSObject))) {
+          return YES;
+        }
+        // class_conformsToProtocol() does not examine superclasses.
+        cls = class_getSuperclass(cls);
       }
-      // class_conformsToProtocol() does not examine superclasses.
-      cls = class_getSuperclass(cls);
+    }
+    @catch (JavaLangThrowable *t) {
+      // Ignore any exceptions thrown by class initialization.
     }
     return NO;
   }
@@ -209,19 +218,19 @@ public class JUnitTestRunner {
    */
   private native Set<Class> getAllTestClasses() /*-[
     int classCount = objc_getClassList(NULL, 0);
-    std::vector<Class> classVector;
-    classVector.resize(classCount);
-    objc_getClassList(&classVector.front(), classCount);
+    Class *classes = (Class *)malloc(classCount * sizeof(Class));
+    objc_getClassList(classes, classCount);
     id<JavaUtilSet> result = [ComGoogleCommonCollectSets newHashSet];
-    for (std::vector<Class>::iterator i = classVector.begin(); i != classVector.end(); i++) {
-      Class const& cls = *i;
+    for (int i = 0; i < classCount; i++) {
+      Class cls = classes[i];
       if (IsNSObjectClass(cls)) {
-        IOSClass *javaClass = [IOSClass classWithClass:cls];
+        IOSClass *javaClass = IOSClass_fromClass(cls);
         if ([self isJUnitTestClassWithIOSClass:javaClass]) {
           [result addWithId:javaClass];
         }
       }
     }
+    free(classes);
     return result;
   ]-*/;
 
@@ -372,13 +381,15 @@ public class JUnitTestRunner {
 
     private int numTests = 0;
     private int numFailures = 0;
+    private final int numUnexpected = 0; // Never changes, but required in output.
 
     private Failure testFailure;
     private double testStartTime;
 
     @Override
     public void testRunFinished(Result result) throws Exception {
-      out.printf("Executed %d tests, with %d failures\n", numTests, numFailures);
+      out.printf("Executed %d tests, with %d failures (%d unexpected)\n", numTests, numFailures,
+          numUnexpected);
     }
 
     @Override

@@ -95,6 +95,10 @@ public abstract class TreeNode {
     return lineNumber;
   }
 
+  public void setLineNumber(int lineNumber) {
+    this.lineNumber = lineNumber;
+  }
+
   public final void accept(TreeVisitor visitor) {
     if (visitor.preVisit(this)) {
       acceptInner(visitor);
@@ -163,6 +167,7 @@ public abstract class TreeNode {
     CATCH_CLAUSE,
     CHARACTER_LITERAL,
     CLASS_INSTANCE_CREATION,
+    COMMA_EXPRESSION,
     COMPILATION_UNIT,
     CONDITIONAL_EXPRESSION,
     CONSTRUCTOR_INVOCATION,
@@ -190,6 +195,7 @@ public abstract class TreeNode {
     METHOD_DECLARATION,
     METHOD_INVOCATION,
     NATIVE_DECLARATION,
+    NATIVE_EXPRESSION,
     NATIVE_STATEMENT,
     NORMAL_ANNOTATION,
     NULL_LITERAL,

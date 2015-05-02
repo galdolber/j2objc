@@ -16,32 +16,40 @@
 
 package com.google.devtools.j2objc.util;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.ast.PackageDeclaration;
+import com.google.devtools.j2objc.file.InputFile;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
-import com.google.devtools.j2objc.types.IOSMethod;
 import com.google.devtools.j2objc.types.IOSMethodBinding;
-import com.google.devtools.j2objc.types.IOSParameter;
 import com.google.devtools.j2objc.types.PointerTypeBinding;
 import com.google.devtools.j2objc.types.Types;
 import com.google.j2objc.annotations.ObjectiveCName;
 
 import org.eclipse.jdt.core.dom.IAnnotationBinding;
-import org.eclipse.jdt.core.dom.IBinding;
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.IPackageBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Singleton service for type/method/variable name support.
@@ -50,10 +58,14 @@ import java.util.logging.Logger;
  */
 public class NameTable {
 
-  private static NameTable instance;
-  private final Map<IBinding, String> renamings = Maps.newHashMap();
+  private final Types typeEnv;
+  private final Map<IVariableBinding, String> variableNames = Maps.newHashMap();
 
   public static final String INIT_NAME = "init";
+  public static final String ALLOC_METHOD = "alloc";
+  public static final String RETAIN_METHOD = "retain";
+  public static final String RELEASE_METHOD = "release";
+  public static final String AUTORELEASE_METHOD = "autorelease";
   public static final String DEALLOC_METHOD = "dealloc";
   public static final String FINALIZE_METHOD = "finalize";
 
@@ -75,7 +87,7 @@ public class NameTable {
    * The list of predefined types, common primitive typedefs, constants and
    * variables.
    */
-  public static final List<String> reservedNames = Lists.newArrayList(
+  public static final Set<String> reservedNames = Sets.newHashSet(
       // types
       "id", "bool", "BOOL", "SEL", "IMP", "unichar",
 
@@ -189,6 +201,16 @@ public class NameTable {
       // Definitions from sys/poll.h
       "POLLERR", "POLLHUP", "POLLIN", "POLLOUT",
 
+      // Definitions from sys/syslimits.h
+      "ARG_MAX", "LINE_MAX", "MAX_INPUT", "NAME_MAX", "NZERO", "PATH_MAX",
+
+      // Definitions from limits.h, machine/limits.h
+      "CHAR_BIT", "CHAR_MAX", "CHAR_MIN", "INT_MAX", "INT_MIN", "LLONG_MAX", "LLONG_MIN",
+      "LONG_BIT", "LONG_MAX", "LONG_MIN", "MB_LEN_MAX", "OFF_MIN", "OFF_MAX",
+      "PTHREAD_DESTRUCTOR_ITERATIONS", "PTHREAD_KEYS_MAX", "PTHREAD_STACK_MIN", "QUAD_MAX",
+      "QUAD_MIN", "SCHAR_MAX", "SCHAR_MIN", "SHRT_MAX", "SHRT_MIN", "SIZE_T_MAX", "SSIZE_MAX",
+      "UCHAR_MAX", "UINT_MAX", "ULONG_MAX", "UQUAD_MAX", "USHRT_MAX", "UULONG_MAX", "WORD_BIT",
+
       // Definitions from types.h
       "S_IRGRP", "S_IROTH", "S_IRUSR", "S_IRWXG", "S_IRWXO", "S_IRWXU", "S_IWGRP", "S_IWOTH",
       "S_IWUSR", "S_IXGRP", "S_IXOTH", "S_IXUSR",
@@ -219,6 +241,10 @@ public class NameTable {
       // Foundation methods with conflicting return types
       "scale");
 
+  private static final Set<String> badParameterNames = Sets.newHashSet(
+      // Objective-C type qualifier keywords.
+      "in", "out", "inout", "oneway", "bycopy", "byref");
+
   /**
    * List of NSObject message names.  Java methods with one of these names are
    * renamed to avoid unintentional overriding.  Message names with trailing
@@ -243,70 +269,83 @@ public class NameTable {
    */
   private final Map<String, String> prefixMap;
 
-  private NameTable(Map<String, String> prefixMap) {
-    this.prefixMap = prefixMap;
-  }
+  private final Map<String, String> methodMappings;
 
   /**
-   * Initialize this service using the AST returned by the parser.
+   * Factory class for creating new NameTable instances.
    */
-  public static void initialize() {
-    instance = new NameTable(Options.getPackagePrefixes());
-  }
+  public static class Factory {
 
-  public static void cleanup() {
-    instance = null;
-  }
+    // Currently a shared map.
+    // TODO(kstanger): For thread safety this will either need to be a
+    // concurrent map, or make a copy for each NameTable.
+    private Map<String, String> prefixMap = Options.getPackagePrefixes();
 
-  /**
-   * Returns a bound name that may have been renamed by a translation phase.
-   *
-   * @return the new name, or the old name if no renaming exists
-   */
-  public static String getName(IBinding binding) {
-    assert binding != null;
-    binding = getBindingDeclaration(binding);
-    String newName = instance.renamings.get(binding);
-    if (newName != null) {
-      return newName;
+    private final Map<String, String> methodMappings = ImmutableMap.copyOf(
+        Maps.transformValues(Options.getMethodMappings(), EXTRACT_SELECTOR_FUNC));
+
+    public NameTable newNameTable(Types typeEnv) {
+      return new NameTable(typeEnv, prefixMap, methodMappings);
     }
-    String name = binding.getName();
-    if (binding instanceof IVariableBinding) {
+  }
+
+  public static Factory newFactory() {
+    return new Factory();
+  }
+
+  private static final Function<String, String> EXTRACT_SELECTOR_FUNC =
+      new Function<String, String>() {
+    public String apply(String value) {
+      return extractMethodSelector(value);
+    }
+  };
+
+  private NameTable(
+      Types typeEnv, Map<String, String> prefixMap, Map<String, String> methodMappings) {
+    this.typeEnv = typeEnv;
+    this.prefixMap = prefixMap;
+    this.methodMappings = methodMappings;
+  }
+
+  public void setVariableName(IVariableBinding var, String name) {
+    var = var.getVariableDeclaration();
+    String previousName = variableNames.get(var);
+    if (previousName != null && !previousName.equals(name)) {
+      logger.fine(String.format("Changing previous rename for variable: %s. Was: %s, now: %s",
+          var.toString(), previousName, name));
+    }
+    variableNames.put(var, name);
+  }
+
+  public String getVariableName(IVariableBinding var) {
+    var = var.getVariableDeclaration();
+    String name = variableNames.get(var);
+    if (name != null) {
+      return name;
+    }
+    name = var.getName();
+    if (!var.isEnumConstant()) {
       if (isReservedName(name)) {
         name += "_";
+      } else if (var.isParameter() && badParameterNames.contains(name)) {
+        name += "Arg";
       }
     }
     return name.equals(SELF_NAME) ? "self" : name;
   }
 
-  private static IBinding getBindingDeclaration(IBinding binding) {
-    if (binding instanceof IVariableBinding) {
-      return ((IVariableBinding) binding).getVariableDeclaration();
-    }
-    if (binding instanceof IMethodBinding) {
-      return ((IMethodBinding) binding).getMethodDeclaration();
-    }
-    if (binding instanceof ITypeBinding) {
-      return ((ITypeBinding) binding).getTypeDeclaration();
-    }
-    return binding;
-  }
-
-  public static boolean isRenamed(IBinding binding) {
-    return instance.renamings.containsKey(binding);
+  /**
+   * Returns the name of an annotation property variable, extracted from its accessor binding.
+   */
+  public static String getAnnotationPropertyVariableName(IMethodBinding binding) {
+    return getAnnotationPropertyName(binding) + '_';
   }
 
   /**
-   * Adds a name to the renamings map, used by getName().
+   * Returns the name of an annotation property variable, extracted from its accessor binding.
    */
-  public static void rename(IBinding oldName, String newName) {
-    oldName = getBindingDeclaration(oldName);
-    String previousName = instance.renamings.get(oldName);
-    if (previousName != null && !previousName.equals(newName)) {
-      logger.fine(String.format("Changing previous rename: %s => %s, now: %s => %s",
-          oldName.toString(), previousName, oldName, newName));
-    }
-    instance.renamings.put(oldName, newName);
+  public static String getAnnotationPropertyName(IMethodBinding binding) {
+    return getMethodName(binding);
   }
 
   /**
@@ -328,17 +367,20 @@ public class NameTable {
     return sb.toString();
   }
 
-  public static String primitiveTypeToObjC(ITypeBinding type) {
-    assert type.isPrimitive();
-    if (Types.isVoidType(type)) {
-      return "void";
+  /**
+   * Given a path, return as a camel-cased name. Used, for example, in header guards.
+   */
+  public static String camelCasePath(String fqn) {
+    StringBuilder sb = new StringBuilder();
+    for (String part : fqn.split(Pattern.quote(File.separator))) {
+      sb.append(capitalize(part));
     }
-    return "j" + type.getName();
+    return sb.toString();
   }
 
   // TODO(kstanger): See whether the logic in this method can be simplified.
   //     Also, what about type variables?
-  private static String getArrayTypeParameterKeyword(ITypeBinding elementType, int dimensions) {
+  private String getArrayTypeParameterKeyword(ITypeBinding elementType, int dimensions) {
     if (elementType.isParameterizedType()) {
       elementType = elementType.getErasure();
     }
@@ -358,12 +400,12 @@ public class NameTable {
     return name;
   }
 
-  private static boolean isIdType(ITypeBinding type) {
-    return type == Types.resolveIOSType("id") || type == Types.resolveIOSType("NSObject")
-        || Types.isJavaObjectType(type);
+  private boolean isIdType(ITypeBinding type) {
+    return type == typeEnv.resolveIOSType("id") || type == typeEnv.resolveIOSType("NSObject")
+        || typeEnv.isJavaObjectType(type);
   }
 
-  private static String getParameterTypeKeyword(ITypeBinding type) {
+  private String getParameterTypeKeyword(ITypeBinding type) {
     if (isIdType(type) || type.isTypeVariable()) {
       ITypeBinding[] bounds = type.getTypeBounds();
       if (bounds.length > 0) {
@@ -378,51 +420,247 @@ public class NameTable {
     return getFullName(type);
   }
 
-  public static String parameterKeyword(ITypeBinding type) {
+  public String parameterKeyword(ITypeBinding type) {
     return "with" + capitalize(getParameterTypeKeyword(type));
   }
 
-  public static String getMethodSelector(IMethodBinding method) {
-    StringBuilder sb = new StringBuilder();
-    if (method.isConstructor()) {
-      sb.append("init");
-    } else {
-      sb.append(getName(method));
+  // Matches the class name prefix or a parameter declarations of a method
+  // signature. After removing these parts, the selector remains.
+  private static final Pattern SIGNATURE_STRIPPER =
+      Pattern.compile("^\\w* |\\s*\\([^)]*\\)\\s*\\w+\\s*");
+
+  // TODO(kstanger): Phase out usage of full method signatures when renaming methods.
+  private static String parseSelectorFromSignature(String s) {
+    if (s.endsWith(";")) {
+      s = s.substring(0, s.length() - 1);
     }
-    IOSMethod iosMethod = IOSMethodBinding.getIOSMethod(method);
-    if (iosMethod != null) {
-      List<IOSParameter> params = iosMethod.getParameters();
-      for (int i = 0; i < params.size(); i++) {
-        if (params.get(i).isVarArgs()) {
-          break;
-        }
-        if (i != 0) {
-          sb.append(params.get(i).getParameterName());
-        }
-        sb.append(":");
+    Matcher matcher = SIGNATURE_STRIPPER.matcher(s);
+    return matcher.replaceAll("");
+  }
+
+  private static final Pattern SELECTOR_VALIDATOR = Pattern.compile("\\w+|(\\w+\\:)+");
+
+  private static boolean validateMethodSelector(String selector) {
+    if (!SELECTOR_VALIDATOR.matcher(selector).matches()) {
+      ErrorUtil.error("Invalid method selector: " + selector);
+      return false;
+    }
+    return true;
+  }
+
+  // Be nice and only print the warning once per method.
+  private static Set<String> renamingWarned = Sets.newHashSet();
+
+  private static String extractMethodSelector(String value) {
+    String selector = value;
+    if (value.contains(" ") || value.contains("(")) {
+      selector = parseSelectorFromSignature(value);
+      if (validateMethodSelector(selector) && !renamingWarned.contains(value)) {
+        ErrorUtil.warning("Method renaming with full signature is being phased out. "
+            + "Please replace \"" + value + "\" with \"" + selector + "\".");
+        renamingWarned.add(value);
       }
     } else {
-      ITypeBinding[] paramTypes = method.getParameterTypes();
-      for (int i = 0; i < paramTypes.length; i++) {
-        String keyword = NameTable.parameterKeyword(paramTypes[i]);
-        if (i == 0) {
-          keyword = NameTable.capitalize(keyword);
-        }
-        sb.append(keyword).append(":");
+      validateMethodSelector(selector);
+    }
+    return selector;
+  }
+
+  public static String getMethodName(IMethodBinding method) {
+    if (method.isConstructor()) {
+      return "init";
+    }
+    String name = method.getName();
+    if (isReservedName(name)) {
+      name += "__";
+    }
+    return name;
+  }
+
+  private String addParamNames(IMethodBinding method, String name, char delim) {
+    method = method.getMethodDeclaration();
+    StringBuilder sb = new StringBuilder(name);
+    ITypeBinding[] paramTypes = method.getParameterTypes();
+    for (int i = 0; i < paramTypes.length; i++) {
+      String keyword = parameterKeyword(paramTypes[i]);
+      if (i == 0) {
+        keyword = capitalize(keyword);
       }
+      sb.append(keyword).append(delim);
     }
     return sb.toString();
+  }
+
+  public String getMethodSelector(IMethodBinding method) {
+    if (method instanceof IOSMethodBinding) {
+      return ((IOSMethodBinding) method).getSelector();
+    }
+    if (BindingUtil.isDestructor(method)) {
+      return DEALLOC_METHOD;
+    }
+    if (method.isConstructor() || BindingUtil.isStatic(method)) {
+      return selectorForOriginalBinding(method);
+    }
+    return selectorForOriginalBinding(getOriginalMethodBindings(method).get(0));
+  }
+
+  private String getRenamedMethodName(IMethodBinding method) {
+    method = method.getMethodDeclaration();
+    String selector = methodMappings.get(BindingUtil.getMethodKey(method));
+    if (selector != null) {
+      return selector;
+    }
+    selector = getMethodNameFromAnnotation(method);
+    if (selector != null) {
+      return selector;
+    }
+    return null;
+  }
+
+  public String selectorForMethodName(IMethodBinding method, String name) {
+    if (name.contains(":")) {
+      return name;
+    }
+    return addParamNames(method, name, ':');
+  }
+
+  private String selectorForOriginalBinding(IMethodBinding method) {
+    String selector = getRenamedMethodName(method);
+    return selectorForMethodName(method, selector != null ? selector : getMethodName(method));
+  }
+
+  /**
+   * In rare edge cases a single method will override two or more methods that
+   * have different selectors. This returns the additional selectors that are
+   * not returned by getMethodSelector().
+   */
+  public List<String> getExtraSelectors(IMethodBinding method) {
+    if (method instanceof IOSMethodBinding || method.isConstructor() || BindingUtil.isStatic(method)
+        || BindingUtil.isDestructor(method)) {
+      return Collections.emptyList();
+    }
+    List<IMethodBinding> originalMethods = getOriginalMethodBindings(method);
+    List<String> extraSelectors = Lists.newArrayList();
+    String actualSelector = selectorForOriginalBinding(originalMethods.get(0));
+    for (int i = 1; i < originalMethods.size(); i++) {
+      String selector = selectorForOriginalBinding(originalMethods.get(i));
+      if (!selector.equals(actualSelector)) {
+        extraSelectors.add(selector);
+      }
+    }
+    return extraSelectors;
+  }
+
+  /**
+   * Returns a "Type_method" function name for static methods, such as from
+   * enum types. A combination of classname plus modified selector is
+   * guaranteed to be unique within the app.
+   */
+  public String getFullFunctionName(IMethodBinding method) {
+    return getFullName(method.getDeclaringClass()) + '_' + getFunctionName(method);
+  }
+
+  /**
+   * Returns the name of the allocating constructor wrapper. The name will take
+   * the form of "new_TypeName_ConstructorName".
+   */
+  public String getAllocatingConstructorName(IMethodBinding method) {
+    return "new_" + getFullFunctionName(method);
+  }
+
+  /**
+   * Returns an appropriate name to use for this method as a function. This name
+   * is guaranteed to be unique within the declaring class, if no methods in the
+   * class have a renaming. The returned name should be given an appropriate
+   * prefix to avoid collisions with methods from other classes.
+   */
+  public String getFunctionName(IMethodBinding method) {
+    method = method.getMethodDeclaration();
+    String name = getRenamedMethodName(method);
+    if (name != null) {
+      return name.replaceAll(":", "_");
+    } else {
+      return addParamNames(method, getMethodName(method), '_');
+    }
+  }
+
+  public static String getMethodNameFromAnnotation(IMethodBinding method) {
+    IAnnotationBinding annotation = BindingUtil.getAnnotation(method, ObjectiveCName.class);
+    if (annotation != null) {
+      String value = (String) BindingUtil.getAnnotationValue(annotation, "value");
+      return extractMethodSelector(value);
+    }
+    return null;
+  }
+
+  /**
+   * Finds all the original overridden method bindings. If the the method is
+   * overridden multiple times in the hierarchy, only the original is included.
+   * Multiple results are still possible if the the given method overrides
+   * methods from multiple interfaces or classes that do not share the same
+   * hierarchy.
+   */
+  private List<IMethodBinding> getOriginalMethodBindings(IMethodBinding method) {
+    method = method.getMethodDeclaration();
+    if (method.isConstructor() || BindingUtil.isStatic(method)) {
+      return Lists.newArrayList(method);
+    }
+    ITypeBinding declaringClass = method.getDeclaringClass();
+    List<IMethodBinding> originalBindings = Lists.newArrayList();
+    originalBindings.add(method);
+
+    // Collect all the inherited types.
+    // Predictable ordering is important, so we use a LinkedHashSet.
+    Set<ITypeBinding> inheritedTypes = Sets.newLinkedHashSet();
+    BindingUtil.collectAllInheritedTypes(declaringClass, inheritedTypes);
+    if (declaringClass.isInterface()) {
+      inheritedTypes.add(typeEnv.resolveJavaType("java.lang.Object"));
+    }
+
+    // Find all overridden methods.
+    for (ITypeBinding inheritedType : inheritedTypes) {
+      for (IMethodBinding interfaceMethod : inheritedType.getDeclaredMethods()) {
+        if (method.overrides(interfaceMethod)) {
+          originalBindings.add(interfaceMethod);
+        }
+      }
+    }
+
+    // Remove any overridden method that overrides another overriden method,
+    // leaving only the original overridden methods. Usually there is just one
+    // but not always.
+    Iterator<IMethodBinding> iter = originalBindings.iterator();
+    while (iter.hasNext()) {
+      IMethodBinding inheritedMethod = iter.next();
+      for (IMethodBinding otherInheritedMethod : originalBindings) {
+        if (inheritedMethod != otherInheritedMethod
+            && inheritedMethod.overrides(otherInheritedMethod)) {
+          iter.remove();
+          break;
+        }
+      }
+    }
+
+    return originalBindings;
+  }
+
+  /**
+   * Converts a Java type to an equivalent Objective-C type, returning "id" for
+   * an object type.
+   */
+  public static String getPrimitiveObjCType(ITypeBinding type) {
+    return type.isPrimitive() ? (BindingUtil.isVoid(type) ? "void" : "j" + type.getName()) : "id";
   }
 
   /**
    * Convert a Java type to an equivalent Objective-C type with type variables
    * resolved to their bounds.
    */
-  public static String getSpecificObjCType(ITypeBinding type) {
+  public String getSpecificObjCType(ITypeBinding type) {
     return getObjCTypeInner(type, null, true);
   }
 
-  public static String getSpecificObjCType(IVariableBinding var) {
+  public String getSpecificObjCType(IVariableBinding var) {
     String qualifiers = null;
     if (var instanceof GeneratedVariableBinding) {
       qualifiers = ((GeneratedVariableBinding) var).getTypeQualifiers();
@@ -434,11 +672,11 @@ public class NameTable {
    * Convert a Java type to an equivalent Objective-C type with type variables
    * converted to "id" regardless of their bounds.
    */
-  public static String getObjCType(ITypeBinding type) {
+  public String getObjCType(ITypeBinding type) {
     return getObjCTypeInner(type, null, false);
   }
 
-  private static String getObjCTypeInner(
+  private String getObjCTypeInner(
       ITypeBinding type, String qualifiers, boolean expandTypeVariables) {
     String objCType;
     if (type instanceof PointerTypeBinding) {
@@ -465,7 +703,7 @@ public class NameTable {
         objCType = ID_TYPE;
       }
     } else if (type.isPrimitive()) {
-      objCType = primitiveTypeToObjC(type);
+      objCType = getPrimitiveObjCType(type);
     } else {
       objCType = constructObjCType(type.getErasure());
     }
@@ -478,11 +716,11 @@ public class NameTable {
     return objCType;
   }
 
-  private static String constructObjCType(ITypeBinding... types) {
+  private String constructObjCType(ITypeBinding... types) {
     String classType = null;
     List<String> interfaces = Lists.newArrayListWithCapacity(types.length);
     for (ITypeBinding type : types) {
-      if (type == null || isIdType(type) || Types.isJavaVoidType(type)) {
+      if (type == null || isIdType(type) || typeEnv.isJavaVoidType(type)) {
         continue;
       }
       if (type.isInterface()) {
@@ -528,53 +766,53 @@ public class NameTable {
    * name plus the inner class name; for example, java.util.ArrayList.ListItr's
    * name is "JavaUtilArrayList_ListItr".
    */
-  public static String getFullName(ITypeBinding binding) {
-    binding = Types.mapType(binding.getErasure());  // Make sure type variables aren't included.
-    String suffix = binding.isEnum() ? "Enum" : "";
-    String prefix = "";
-    IMethodBinding outerMethod = binding.getDeclaringMethod();
-    if (outerMethod != null && !binding.isAnonymous()) {
-      prefix += "_" + outerMethod.getName();
-    }
+  public String getFullName(ITypeBinding binding) {
+    String name = getFullNameInner(binding);
+    return binding.isEnum() ? (name + "Enum") : name;
+  }
+
+  private String getFullNameInner(ITypeBinding binding) {
+    binding = typeEnv.mapType(binding.getErasure());  // Make sure type variables aren't included.
     ITypeBinding outerBinding = binding.getDeclaringClass();
     if (outerBinding != null) {
-      String baseName = getFullName(outerBinding) + prefix + '_' + getName(binding);
-      return (outerBinding.isEnum() && binding.isAnonymous()) ? baseName : baseName + suffix;
+      String baseName = getFullNameInner(outerBinding) + '_' + getTypeSubName(binding);
+      return (outerBinding.isEnum() && binding.isAnonymous()) ? baseName : baseName;
     }
     String name = binding.getQualifiedName();
 
     // Use ObjectiveCType annotation, if it exists.
     IAnnotationBinding annotation = BindingUtil.getAnnotation(binding, ObjectiveCName.class);
     if (annotation != null) {
-      name = (String) BindingUtil.getAnnotationValue(annotation, "value");
-      return name + suffix;
+      return (String) BindingUtil.getAnnotationValue(annotation, "value");
     }
 
     // Use mapping file entry, if it exists.
     if (Options.getClassMappings().containsKey(name)) {
-      name = Options.getClassMappings().get(name);
-      return name + suffix;
+      return Options.getClassMappings().get(name);
     }
 
     // Use camel-cased package+class name.
     IPackageBinding pkg = binding.getPackage();
-    String pkgName = pkg != null ? getPrefix(pkg.getName()) : "";
-    return pkgName + binding.getName() + suffix;
+    String pkgName = pkg != null ? getPrefix(pkg) : "";
+    return pkgName + binding.getName();
   }
 
-  /**
-   * Returns a "Type_method" function name for static methods, such as from
-   * enum types. A combination of classname plus modified selector is
-   * guaranteed to be unique within the app.
-   */
-  public static String makeFunctionName(IMethodBinding methodBinding) {
-    ITypeBinding classBinding = methodBinding.getDeclaringClass();
-    String className = getFullName(classBinding);
-    String methodName = getMethodSelector(methodBinding).replace(':', '_');
-    return String.format("%s_%s", className, methodName);
+  private static String getTypeSubName(ITypeBinding binding) {
+    if (binding.isAnonymous()) {
+      String binaryName = binding.getBinaryName();
+      return binaryName.substring(binaryName.lastIndexOf("$"));
+    } else if (binding.isLocal()) {
+      String binaryName = binding.getBinaryName();
+      int innerClassIndex = binaryName.lastIndexOf(binding.getName());
+      while (innerClassIndex > 0 && binaryName.charAt(innerClassIndex - 1) != '$') {
+        --innerClassIndex;
+      }
+      return binaryName.substring(innerClassIndex);
+    }
+    return binding.getName();
   }
 
-  public static boolean isReservedName(String name) {
+  private static boolean isReservedName(String name) {
     return reservedNames.contains(name) || nsObjectMessages.contains(name);
   }
 
@@ -583,7 +821,7 @@ public class NameTable {
     if (pkg.isDefaultPackage()) {
       return unit.getMainTypeName();
     } else {
-      return getPrefix(pkg.getName().getFullyQualifiedName()) + unit.getMainTypeName();
+      return unit.getNameTable().getPrefix(pkg.getPackageBinding()) + unit.getMainTypeName();
     }
   }
 
@@ -592,16 +830,17 @@ public class NameTable {
     return isReservedName(varName) ? "get" + capitalize(varName) : varName;
   }
 
-  public static String getStaticVarQualifiedName(IVariableBinding var) {
+  public String getStaticVarQualifiedName(IVariableBinding var) {
     ITypeBinding declaringType = var.getDeclaringClass().getTypeDeclaration();
-    return getFullName(declaringType) + "_" + getName(var) + (var.isEnumConstant() ? "" : "_");
+    return getFullName(declaringType) + "_" + getVariableName(var)
+        + (var.isEnumConstant() ? "" : "_");
   }
 
-  public static String getStaticVarName(IVariableBinding var) {
-    return getName(var) + (var.isEnumConstant() ? "" : "_");
+  public String getStaticVarName(IVariableBinding var) {
+    return getVariableName(var) + (var.isEnumConstant() ? "" : "_");
   }
 
-  public static String getPrimitiveConstantName(IVariableBinding constant) {
+  public String getPrimitiveConstantName(IVariableBinding constant) {
     return String.format("%s_%s", getFullName(constant.getDeclaringClass()), constant.getName());
   }
 
@@ -609,27 +848,104 @@ public class NameTable {
     return fieldName + "_";
   }
 
-  public static void mapPackageToPrefix(String packageName, String prefix) {
-    instance.prefixMap.put(packageName, prefix);
+  @VisibleForTesting
+  public void mapPackageToPrefix(String packageName, String prefix) {
+    prefixMap.put(packageName, prefix);
   }
 
   /**
-   * Return the prefix for a specified package.  If a prefix was specified
-   * for the package on the command-line, then that prefix is returned.
-   * Otherwise, a camel-cased prefix is created from the package name.
+   * Return the prefix for a specified package. If a prefix was specified
+   * for the package, then that prefix is returned. Otherwise, a camel-cased
+   * prefix is created from the package name.
    */
-  public static String getPrefix(String packageName) {
+  public String getPrefix(IPackageBinding packageBinding) {
+    String packageName = packageBinding.getName();
     if (hasPrefix(packageName)) {
-      return instance.prefixMap.get(packageName);
+      return prefixMap.get(packageName);
     }
-    StringBuilder sb = new StringBuilder();
-    for (String part : packageName.split("\\.")) {
-      sb.append(capitalize(part));
+
+    for (IAnnotationBinding annotation : packageBinding.getAnnotations()) {
+      if (annotation.getName().endsWith("ObjectiveCName")) {
+        String prefix = (String) BindingUtil.getAnnotationValue(annotation, "value");
+        prefixMap.put(packageName, prefix);
+        // Don't return, as there may be a prefix annotation that overrides this value.
+      }
     }
-    return sb.toString();
+
+    String prefix = getPrefixFromPackageInfoSource(packageBinding);
+    if (prefix == null) {
+      prefix = getPrefixFromPackageInfoClass(packageName);
+    }
+    if (prefix == null) {
+      prefix = camelCaseQualifiedName(packageName);
+    }
+    prefixMap.put(packageName, prefix);
+    return prefix;
   }
 
-  public static boolean hasPrefix(String packageName) {
-    return instance.prefixMap.containsKey(packageName);
+  /**
+   * Check if there is a package-info.java source file with a prefix annotation.
+   */
+  private static String getPrefixFromPackageInfoSource(IPackageBinding packageBinding) {
+    try {
+      String qualifiedName = "package-info";
+      String packageName = packageBinding.getName();
+      // Path will be null if this is the empty package.
+      if (packageName != null) {
+        qualifiedName = packageName + '.' + qualifiedName;
+      }
+      InputFile file = FileUtil.findOnSourcePath(qualifiedName);
+      if (file != null) {
+        String pkgInfo = FileUtil.readFile(file);
+        int i = pkgInfo.indexOf("@ObjectiveCName");
+        if (i == -1) {
+          i = pkgInfo.indexOf("@com.google.j2objc.annotations.ObjectiveCName");
+        }
+        if (i > -1) {
+          // Extract annotation's value string.
+          i = pkgInfo.indexOf('"', i + 1);
+          if (i > -1) {
+            int j = pkgInfo.indexOf('"', i + 1);
+            if (j > -1) {
+              return pkgInfo.substring(i + 1, j);
+            }
+          }
+        }
+      }
+    } catch (IOException e) {
+      // Continue, as there's no package-info to check.
+    }
+    return null;
+  }
+
+  /**
+   * Check if there is a package-info class with a prefix annotation.
+   */
+  private static String getPrefixFromPackageInfoClass(String packageName) {
+    List<String> paths = Options.getBootClasspath();
+    paths.addAll(Options.getClassPathEntries());
+    PathClassLoader classLoader = new PathClassLoader(paths);
+    try {
+      Class<?> clazz = classLoader.loadClass(packageName + ".package-info");
+      ObjectiveCName objectiveCName = clazz.getAnnotation(ObjectiveCName.class);
+      if (objectiveCName != null) {
+        return objectiveCName.value();
+      }
+    } catch (ClassNotFoundException e) {
+      // Class does not exist -- ignore exception.
+    } catch (SecurityException e) {
+      // Failed fetching a package-info class from a secure package -- ignore exception.
+    } finally {
+      try {
+        classLoader.close();
+      } catch (IOException e) {
+        // Ignore, any open files will be closed on exit.
+      }
+    }
+    return null;
+  }
+
+  public boolean hasPrefix(String packageName) {
+    return prefixMap.containsKey(packageName);
   }
 }

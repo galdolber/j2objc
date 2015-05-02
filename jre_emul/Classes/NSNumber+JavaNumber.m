@@ -19,11 +19,11 @@
 
 #import "NSNumber+JavaNumber.h"
 
-@implementation NSNumber (JavaNumber)
+#import "J2ObjC_source.h"
 
-+ (long long int)serialVersionUID {
-  return -8742448824652078965L;
-}
+#define JavaLangNumber_serialVersionUID -8742448824652078965LL
+
+@implementation NSNumber (JavaNumber)
 
 + (J2ObjcClassInfo *)__metadata {
   static J2ObjcMethodInfo methods[] = {
@@ -34,13 +34,19 @@
     { "longLongValue", "longValue", "J", 0x401, NULL },
     { "shortValue", NULL, "S", 0x401, NULL },
   };
+  static J2ObjcFieldInfo fields[] = {
+    { "serialVersionUID_", NULL, 0x1a, "J", NULL,
+      .constantValue.asLong = JavaLangNumber_serialVersionUID },
+  };
   static J2ObjcClassInfo _JavaLangNumber = {
-    "Number", "java.lang", NULL, 0x401, 6, methods, 0, NULL, 0, NULL
+    1, "Number", "java.lang", NULL, 0x401, 6, methods, 1, fields, 0, NULL
   };
   return &_JavaLangNumber;
 }
 
 @end
+
+J2OBJC_CLASS_TYPE_LITERAL_SOURCE(NSNumber)
 
 // Empty class to force category to be loaded.
 @implementation JreNumberCategoryDummy

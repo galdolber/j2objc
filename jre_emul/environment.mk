@@ -47,6 +47,9 @@ REGEX_TEST_ROOT = $(APACHE_HARMONY_BASE)/regex/src/test/java
 CONCURRENT_TEST_ROOT = $(APACHE_HARMONY_BASE)/concurrent/src/test/java
 ARCHIVE_TEST_ROOT = $(APACHE_HARMONY_BASE)/archive/src/test/java
 LOGGING_TEST_ROOT = $(APACHE_HARMONY_BASE)/logging/src/test/java
+ICU4C_I18N_ROOT = icu4c/i18n
+ICU4C_COMMON_ROOT = icu4c/common
+J2OBJC_ANNOTATIONS_ROOT = ../annotations/src/main/java
 
 ANDROID_BASE = android
 ANDROID_CORE_ROOT = $(ANDROID_BASE)/frameworks/base/core/java
@@ -93,7 +96,7 @@ endif
 JRE_SRC_ROOTS = $(JRE_ROOT) $(JRE_CONCURRENT_ROOT) $(JRE_KERNEL_ROOT) \
     $(JRE_MATH_ROOT) $(ANDROID_DALVIK_ROOT) $(ANDROID_LUNI_ROOT) \
     $(ANDROID_XML_ROOT) $(EMULATION_CLASS_DIR) $(JRE_ARCHIVE_ROOT) \
-    $(ANDROID_CORE_ROOT) $(ANDROID_JSON_ROOT)
+    $(ANDROID_CORE_ROOT) $(ANDROID_JSON_ROOT) $(J2OBJC_ANNOTATIONS_ROOT)
 JRE_SRC = $(subst $(eval) ,:,$(JRE_SRC_ROOTS))
 TEST_SRC_ROOTS = $(JRE_TEST_ROOT) $(JRE_MATH_TEST_ROOT) \
     $(TEST_SUPPORT_ROOT) $(MATH_TEST_SUPPORT_ROOT) $(REGEX_TEST_ROOT) \
@@ -108,9 +111,6 @@ vpath %.java $(JRE_SRC):$(TEST_SRC):$(STUBS_DIR)
 # Clang warnings
 WARNINGS := $(WARNINGS) -Wall -Werror -Wshorten-64-to-32 -Wsign-compare
 
-# Require C11 compilation to support Java volatile translation.
-OBJCFLAGS := -std=c11
-
 ifeq ("$(strip $(XCODE_VERSION_MAJOR))", "0500")
 OBJCFLAGS += -DSET_MIN_IOS_VERSION
 endif
@@ -121,8 +121,11 @@ OBJCFLAGS += $(WARNINGS) -DU_DISABLE_RENAMING=1 -fno-strict-overflow \
   -fobjc-abi-version=2 -fobjc-legacy-dispatch $(DEBUGFLAGS) \
   -I/System/Library/Frameworks/ExceptionHandling.framework/Headers \
   -I/System/Library/Frameworks/Security.framework/Headers \
-  -I$(ANDROID_INCLUDE) -I$(ICU4C_I18N_INCLUDE) -I$(ICU4C_COMMON_INCLUDE) \
-  -I$(APPLE_ROOT)
+  -I$(ANDROID_INCLUDE) -I$(APPLE_ROOT)
+
+# Only use the icu headers when building for OSX. For IOS these headers should
+# be available in the SDK.
+FAT_LIB_OSX_FLAGS = -I$(ICU4C_I18N_ROOT) -I$(ICU4C_COMMON_ROOT)
 
 ifdef MAX_STACK_FRAMES
 OBJCFLAGS += -DMAX_STACK_FRAMES=$(MAX_STACK_FRAMES)
@@ -138,6 +141,11 @@ endif
 
 # Settings for classes that need to always compile without ARC.
 OBJCFLAGS_NO_ARC := $(OBJCFLAGS)
+
+OBJCPPFLAGS := $(OBJCFLAGS) -x objective-c++ -DU_SHOW_CPLUSPLUS_API=0
+
+# Require C11 compilation to support Java volatile translation.
+OBJCFLAGS += -std=c11
 
 ifeq ("$(strip $(CLANG_ENABLE_OBJC_ARC))", "YES")
 $(error The jre_emul build no longer supports an ARC build)

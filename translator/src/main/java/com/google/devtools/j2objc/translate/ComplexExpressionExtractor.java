@@ -36,7 +36,7 @@ import com.google.devtools.j2objc.ast.TreeVisitor;
 import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
 import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.types.GeneratedVariableBinding;
-import com.google.devtools.j2objc.types.Types;
+import com.google.devtools.j2objc.util.BindingUtil;
 
 import org.eclipse.jdt.core.dom.IMethodBinding;
 import org.eclipse.jdt.core.dom.ITypeBinding;
@@ -160,6 +160,7 @@ public class ComplexExpressionExtractor extends TreeVisitor {
       case POSTFIX_EXPRESSION:
       case PREFIX_EXPRESSION: // Parentheses not needed, but better for readability.
         ParenthesizedExpression.parenthesizeAndReplace(node);
+        break;
       default:
         // Ignore.
     }
@@ -167,7 +168,7 @@ public class ComplexExpressionExtractor extends TreeVisitor {
 
   @Override
   public void endVisit(Assignment node) {
-    if (Types.isBooleanType(node.getTypeBinding())) {
+    if (BindingUtil.isBoolean(node.getTypeBinding())) {
       if (node.getRightHandSide() instanceof InfixExpression) {
         // Avoid clang precedence warning by putting parentheses around expression.
         ParenthesizedExpression.parenthesizeAndReplace(node.getRightHandSide());
@@ -204,7 +205,7 @@ public class ComplexExpressionExtractor extends TreeVisitor {
   }
 
   private boolean isEqualityExpression(Expression expr) {
-    return expr instanceof InfixExpression &&
-        ((InfixExpression) expr).getOperator() == InfixExpression.Operator.EQUALS;
+    return expr instanceof InfixExpression
+        && ((InfixExpression) expr).getOperator() == InfixExpression.Operator.EQUALS;
   }
 }

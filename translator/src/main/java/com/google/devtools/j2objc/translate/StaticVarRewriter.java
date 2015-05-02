@@ -17,6 +17,7 @@ package com.google.devtools.j2objc.translate;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
 import com.google.devtools.j2objc.ast.Assignment;
+import com.google.devtools.j2objc.ast.CommaExpression;
 import com.google.devtools.j2objc.ast.Expression;
 import com.google.devtools.j2objc.ast.FieldAccess;
 import com.google.devtools.j2objc.ast.FunctionInvocation;
@@ -29,9 +30,8 @@ import com.google.devtools.j2objc.ast.SwitchCase;
 import com.google.devtools.j2objc.ast.TreeNode;
 import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TreeVisitor;
-import com.google.devtools.j2objc.types.Types;
 import com.google.devtools.j2objc.util.BindingUtil;
-import com.google.devtools.j2objc.util.NameTable;
+import com.google.devtools.j2objc.util.TranslationUtil;
 
 import org.eclipse.jdt.core.dom.ITypeBinding;
 import org.eclipse.jdt.core.dom.IVariableBinding;
@@ -55,6 +55,7 @@ public class StaticVarRewriter extends TreeVisitor {
   @Override
   public boolean visit(Assignment node) {
     Expression lhs = node.getLeftHandSide();
+    handleFieldAccess(node, lhs);
     IVariableBinding lhsVar = TreeUtil.getVariableBinding(lhs);
     if (lhsVar != null && useAccessor(node, lhsVar)) {
       boolean isPrimitive = lhsVar.getType().isPrimitive();
@@ -67,6 +68,49 @@ public class StaticVarRewriter extends TreeVisitor {
         lhs.replaceWith(newGetterInvocation(lhsVar, true));
       }
     }
+    return true;
+  }
+
+  /**
+   * Reterns whether the expression of a FieldAccess node has any side effects.
+   * If false, the expression can be removed from the tree.
+   * @param expr The expression of a FieldAccess node for a static variable.
+   */
+  private boolean fieldAccessExpressionHasSideEffect(Expression expr) {
+    switch (expr.getKind()) {
+      case QUALIFIED_NAME:
+      case SIMPLE_NAME:
+      case THIS_EXPRESSION:
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  private void handleFieldAccess(Expression node, Expression maybeFieldAccess) {
+    if (!(maybeFieldAccess instanceof FieldAccess)) {
+      return;
+    }
+    FieldAccess fieldAccess = (FieldAccess) maybeFieldAccess;
+    if (!BindingUtil.isStatic(fieldAccess.getVariableBinding())) {
+      return;
+    }
+    Expression expr = fieldAccess.getExpression();
+    Name name = fieldAccess.getName();
+    if (fieldAccessExpressionHasSideEffect(expr)) {
+      CommaExpression commaExpr = new CommaExpression(TreeUtil.remove(expr));
+      node.replaceWith(commaExpr);
+      commaExpr.getExpressions().add(node);
+      fieldAccess.replaceWith(TreeUtil.remove(name));
+      expr.accept(this);
+    } else {
+      fieldAccess.replaceWith(TreeUtil.remove(name));
+    }
+  }
+
+  @Override
+  public boolean visit(FieldAccess node) {
+    handleFieldAccess(node, node);
     return true;
   }
 
@@ -104,6 +148,7 @@ public class StaticVarRewriter extends TreeVisitor {
 
   @Override
   public boolean visit(PostfixExpression node) {
+    handleFieldAccess(node, node.getOperand());
     IVariableBinding operandVar = TreeUtil.getVariableBinding(node.getOperand());
     PostfixExpression.Operator op = node.getOperator();
     boolean isIncOrDec = op == PostfixExpression.Operator.INCREMENT
@@ -117,6 +162,7 @@ public class StaticVarRewriter extends TreeVisitor {
 
   @Override
   public boolean visit(PrefixExpression node) {
+    handleFieldAccess(node, node.getOperand());
     IVariableBinding operandVar = TreeUtil.getVariableBinding(node.getOperand());
     PrefixExpression.Operator op = node.getOperator();
     boolean isIncOrDec = op == PrefixExpression.Operator.INCREMENT
@@ -130,18 +176,19 @@ public class StaticVarRewriter extends TreeVisitor {
 
   private Expression newGetterInvocation(IVariableBinding var, boolean assignable) {
     ITypeBinding declaringType = var.getDeclaringClass().getTypeDeclaration();
-    String varName = NameTable.getStaticVarName(var);
+    String varName = nameTable.getStaticVarName(var);
     String getterName = "get";
-    ITypeBinding returnType = var.getType();
+    ITypeBinding type = var.getType();
+    ITypeBinding returnType = type;
     if (assignable) {
       getterName += "Ref";
-      returnType = Types.getPointerType(returnType);
+      returnType = typeEnv.getPointerType(returnType);
     }
-    getterName = NameTable.getFullName(declaringType) + "_" + getterName + "_" + varName;
+    getterName = nameTable.getFullName(declaringType) + "_" + getterName + "_" + varName;
     Expression invocation = new FunctionInvocation(
         getterName, returnType, returnType, declaringType);
     if (assignable) {
-      invocation = new PrefixExpression(PrefixExpression.Operator.DEREFERENCE, invocation);
+      invocation = new PrefixExpression(type, PrefixExpression.Operator.DEREFERENCE, invocation);
     }
     return invocation;
   }
@@ -150,11 +197,15 @@ public class StaticVarRewriter extends TreeVisitor {
     ITypeBinding varType = var.getType();
     ITypeBinding declaringType = var.getDeclaringClass();
     String funcFormat = "%s_set_%s";
-    if (Options.useReferenceCounting() && TreeUtil.retainResult(value)) {
-      funcFormat = "%s_setAndConsume_%s";
+    if (Options.useReferenceCounting()) {
+      Expression retainedValue = TranslationUtil.retainResult(value);
+      if (retainedValue != null) {
+        funcFormat = "%s_setAndConsume_%s";
+        value = retainedValue;
+      }
     }
     String funcName = String.format(
-        funcFormat, NameTable.getFullName(declaringType), NameTable.getStaticVarName(var));
+        funcFormat, nameTable.getFullName(declaringType), nameTable.getStaticVarName(var));
     FunctionInvocation invocation = new FunctionInvocation(
         funcName, varType, varType, declaringType);
     invocation.getArguments().add(value);

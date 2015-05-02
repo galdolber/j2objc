@@ -45,12 +45,6 @@ public class GwtConverterTest extends GenerationTest {
         "com/google/common/annotations/GwtIncompatible.java");
   }
 
-  @Override
-  protected void tearDown() throws Exception {
-    Options.setStripGwtIncompatibleMethods(false);
-    super.tearDown();
-  }
-
   public void testGwtCreate() throws IOException {
     String translation = translateSourceFile(
         "import com.google.gwt.core.client.GWT;"
@@ -58,8 +52,7 @@ public class GwtConverterTest extends GenerationTest {
         + "  Test INSTANCE = GWT.create(Test.class);"
         + "  String FOO = foo();"  // Regression requires subsequent non-mapped method invocation.
         + "  static String foo() { return \"foo\"; } }", "Test", "Test.m");
-    assertTranslation(translation, "Test_set_INSTANCE_(self, "
-        + "[[IOSClass classWithClass:[Test class]] newInstance]);");
+    assertTranslation(translation, "Test_set_INSTANCE_(self, [Test_class_() newInstance]);");
   }
 
   public void testGwtIsScript() throws IOException {

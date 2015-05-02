@@ -26,6 +26,7 @@ import org.eclipse.jdt.core.dom.FileASTRequestor;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -44,7 +45,6 @@ public class JdtParser {
   private List<String> classpathEntries = Lists.newArrayList();
   private List<String> sourcepathEntries = Lists.newArrayList();
   private String encoding = null;
-  private boolean ignoreMissingImports = false;
   private boolean includeRunningVMBootclasspath = true;
 
   private static Map<String, String> initCompilerOptions() {
@@ -94,10 +94,6 @@ public class JdtParser {
     this.encoding = encoding;
   }
 
-  public void setIgnoreMissingImports(boolean ignoreMissingImports) {
-    this.ignoreMissingImports = ignoreMissingImports;
-  }
-
   public void setIncludeRunningVMBootclasspath(boolean includeVMBootclasspath) {
     includeRunningVMBootclasspath = includeVMBootclasspath;
   }
@@ -110,13 +106,24 @@ public class JdtParser {
         enable ? "enabled" : "disabled");
   }
 
-  public CompilationUnit parse(String filename, String source) {
-    ASTParser parser = newASTParser();
-    parser.setUnitName(filename);
+  public CompilationUnit parseWithoutBindings(String unitName, String source) {
+    return parse(unitName, source, false);
+  }
+
+  public CompilationUnit parseWithBindings(String unitName, String source) {
+    return parse(unitName, source, true);
+  }
+
+  private CompilationUnit parse(String unitName, String source, boolean resolveBindings) {
+    ASTParser parser = newASTParser(resolveBindings);
+    parser.setUnitName(unitName);
     parser.setSource(source.toCharArray());
     CompilationUnit unit = (CompilationUnit) parser.createAST(null);
-    checkCompilationErrors(filename, unit);
-    return unit;
+    if (checkCompilationErrors(unitName, unit)) {
+      return unit;
+    } else {
+      return null;
+    }
   }
 
   /**
@@ -124,18 +131,16 @@ public class JdtParser {
    * implementation is called with the parsed units.
    */
   public interface Handler {
-    public void handleParsedUnit(String filePath, CompilationUnit unit);
+    public void handleParsedUnit(String path, CompilationUnit unit);
   }
 
-  public void parseFiles(List<String> filePaths, final Handler handler) {
-    ASTParser parser = newASTParser();
+  public void parseFiles(Collection<String> paths, final Handler handler) {
+    ASTParser parser = newASTParser(true);
     FileASTRequestor astRequestor = new FileASTRequestor() {
       @Override
       public void acceptAST(String sourceFilePath, CompilationUnit ast) {
         logger.fine("acceptAST: " + sourceFilePath);
-        int errors = ErrorUtil.errorCount();
-        checkCompilationErrors(sourceFilePath, ast);
-        if (errors == ErrorUtil.errorCount()) {
+        if (checkCompilationErrors(sourceFilePath, ast)) {
           handler.handleParsedUnit(sourceFilePath, ast);
         }
       }
@@ -144,14 +149,14 @@ public class JdtParser {
     // number of "binding key" strings as source files. It doesn't appear to
     // matter what the binding key strings should be (as long as they're non-
     // null), so the paths array is reused.
-    String[] paths = filePaths.toArray(new String[0]);
-    parser.createASTs(paths, getEncodings(paths.length), paths, astRequestor, null);
+    String[] pathsArray = paths.toArray(new String[paths.size()]);
+    parser.createASTs(pathsArray, getEncodings(pathsArray.length), pathsArray, astRequestor, null);
   }
 
-  private ASTParser newASTParser() {
+  private ASTParser newASTParser(boolean resolveBindings) {
     ASTParser parser = ASTParser.newParser(AST.JLS4);
     parser.setCompilerOptions(compilerOptions);
-    parser.setResolveBindings(true);
+    parser.setResolveBindings(resolveBindings);
     parser.setEnvironment(
         toArray(classpathEntries), toArray(sourcepathEntries),
         getEncodings(sourcepathEntries.size()), includeRunningVMBootclasspath);
@@ -177,16 +182,15 @@ public class JdtParser {
     return encodings;
   }
 
-  private void checkCompilationErrors(String filename, CompilationUnit unit) {
+  private boolean checkCompilationErrors(String filename, CompilationUnit unit) {
+    boolean hasErrors = false;
     for (IProblem problem : unit.getProblems()) {
       if (problem.isError()) {
-        if (((problem.getID() & IProblem.ImportRelated) != 0) && ignoreMissingImports) {
-          continue;
-        } else {
-          ErrorUtil.error(String.format(
-              "%s:%s: %s", filename, problem.getSourceLineNumber(), problem.getMessage()));
-        }
+        ErrorUtil.error(String.format(
+            "%s:%s: %s", filename, problem.getSourceLineNumber(), problem.getMessage()));
+        hasErrors = true;
       }
     }
+    return !hasErrors;
   }
 }
